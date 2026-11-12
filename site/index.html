@@ -38,13 +38,17 @@ button { font: inherit; padding: 6px 14px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .out { display: flex; gap: 10px; align-items: stretch; }
 .out input { flex: 1; min-width: 0; }
-table { border-collapse: collapse; width: 100%; font-size: .95em; }
-td { border-top: 1px solid var(--line); padding: 6px 8px 6px 0; vertical-align: middle; }
-td.name { width: 30%; word-break: break-word; }
-td.hash { word-break: break-all; }
-td.btn { width: 1%; padding-right: 0; }
-td.btn button { padding: 3px 10px; }
-.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+details { margin: 0 0 14px; }
+summary { cursor: pointer; font-size: .9em; margin-bottom: 10px; }
+button.link { background: none; border: 0; padding: 0; color: inherit; font-size: inherit; text-decoration: underline; cursor: pointer; }
+body, input, textarea { transition: background-color .4s, color .4s, border-color .4s; }
+:root.cute { --bg: #ffe4ef; --fg: #a0124f; --muted: #c2477b; --line: #f19bbf; accent-color: #d6246e; }
+:root.cute[data-theme="dark"] { --bg: #3a0f22; --fg: #ffc2da; --muted: #e88ab0; --line: #8a2f58; accent-color: #ff6fa8; }
+.note { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 16px 24px; font-size: 1.3em; white-space: nowrap; z-index: 10; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.note.on { opacity: 1; }
+.heart { position: fixed; bottom: -40px; z-index: 9; pointer-events: none; color: #e8417f; animation: rise linear forwards; }
+@keyframes rise { to { transform: translateY(-115vh) rotate(var(--r)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .heart { display: none; } }
 [hidden] { display: none !important; }
 footer { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 20px 0 40px; border-top: 1px solid var(--line); font-size: .9em; }
 footer p { margin: 0 0 6px; }
@@ -55,13 +59,22 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
 <main>
   <h1>Hash Maker</h1>
   <p class="byline muted">by <a href="https://jedbillyb.com/">Jed Blenkhorn</a></p>
-  <p>Type a word or a name and get its hash. Cut it to the length you want, then copy it.</p>
+  <p>Type a word or a name to get its hash: a jumble of letters and numbers that is always the same for the same text. Cut it to the length you want and copy it. Nothing you type leaves your browser.</p>
 
   <label class="block">Text
     <textarea id="text" rows="3" spellcheck="false" autocomplete="off" placeholder="Type here"></textarea>
   </label>
-  <p><label><input type="checkbox" id="lines"> One hash per line, for a list of names</label></p>
 
+  <fieldset>
+    <legend>Length <span class="muted" id="full"></span></legend>
+    <div class="pair">
+      <input type="number" id="len" min="1" inputmode="numeric" aria-label="Length">
+      <input type="range" id="slide" min="1" aria-label="Length slider">
+    </div>
+  </fieldset>
+
+  <details>
+  <summary>Advanced options</summary>
   <fieldset>
     <legend>Hash</legend>
     <div class="inline">
@@ -80,35 +93,19 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
       <label><input type="radio" name="fmt" value="b64"> Base64</label>
     </div>
   </fieldset>
-
-  <fieldset>
-    <legend>Length <span class="muted" id="full"></span></legend>
-    <div class="pair">
-      <input type="number" id="len" min="1" inputmode="numeric" aria-label="Length">
-      <input type="range" id="slide" min="1" aria-label="Length slider">
-    </div>
-  </fieldset>
+  </details>
 
   <h2>Hash</h2>
-  <div id="single">
-    <div class="out">
-      <input type="text" id="result" class="mono" readonly aria-label="Hash">
-      <button type="button" id="copy">Copy</button>
-    </div>
+  <div class="out">
+    <input type="text" id="result" class="mono" readonly aria-label="Hash">
+    <button type="button" id="copy">Copy</button>
   </div>
-  <div id="multi" hidden>
-    <table><tbody id="rows"></tbody></table>
-    <div class="row"><button type="button" id="copyall">Copy all</button> <span class="muted">One hash per line, in the same order.</span></div>
-  </div>
-
-  <h2>About</h2>
-  <p>A hash turns any text into a fixed jumble of letters and numbers. The same text always gives the same hash, and a tiny change (even one capital letter or a space) gives a completely different one.</p>
-  <p class="muted">Everything happens in your browser. Nothing you type is sent anywhere.</p>
 </main>
+<div class="note" id="note" role="status">aww your so cute</div>
 <footer>
   <p>Made by <a href="https://jedbillyb.com/">Jed Blenkhorn</a>. Also try the <a href="https://font.jedbillyb.com/">Handwriting Font Maker</a>.</p>
   <p class="links"><a href="https://jedbillyb.com/">jedbillyb.com</a> <a href="https://github.com/jedbillyb">GitHub</a> <a href="mailto:hello@jedbillyb.com">Email</a> <a href="https://buymeacoffee.com/jedbillyb">Buy me a coffee</a></p>
-  <p><button type="button" id="theme">Dark mode</button></p>
+  <p><button type="button" class="link" id="theme">Dark mode</button></p>
 </footer>
 <script>
 (function () {
@@ -159,11 +156,11 @@ function md5(bytes) {
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var text = $('text'), lines = $('lines'), len = $('len'), slide = $('slide'), full = $('full');
-  var result = $('result'), rows = $('rows');
+  var text = $('text'), len = $('len'), slide = $('slide'), full = $('full');
+  var result = $('result');
   var BYTES = { 'SHA-1': 20, 'SHA-256': 32, 'SHA-512': 64, 'MD5': 16 };
   var want = null; // chosen length, null = full
-  var run = 0, current = [];
+  var run = 0, cute = false;
 
   function pick(name) { return document.querySelector('input[name=' + name + ']:checked').value; }
   function fullLength() {
@@ -192,26 +189,11 @@ function md5(bytes) {
 
   function update() {
     var n = syncLength(), algo = pick('algo'), fmt = pick('fmt'), me = ++run;
-    var many = lines.checked;
-    var items = many ? text.value.split('\n').map(function (l) { return l.trim(); }) : [text.value];
-    $('single').hidden = many; $('multi').hidden = !many;
-    Promise.all(items.map(function (s) {
-      return s === '' && many ? Promise.resolve('') : digest(algo, s).then(function (b) { return encode(b, fmt).slice(0, n); });
-    })).then(function (hashes) {
+    egg();
+    if (text.value === '') { result.value = ''; return; }
+    digest(algo, text.value).then(function (b) {
       if (me !== run) return; // a newer keystroke already started
-      current = hashes;
-      if (!many) { result.value = text.value === '' ? '' : hashes[0]; return; }
-      rows.textContent = '';
-      items.forEach(function (name, i) {
-        if (name === '') return;
-        var tr = document.createElement('tr');
-        tr.innerHTML = '<td class="name"></td><td class="hash mono"></td><td class="btn"><button type="button">Copy</button></td>';
-        tr.children[0].textContent = name;
-        tr.children[1].textContent = hashes[i];
-        var btn = tr.querySelector('button');
-        btn.onclick = function () { copy(hashes[i], btn); };
-        rows.appendChild(tr);
-      });
+      result.value = encode(b, fmt).slice(0, n);
     });
   }
 
@@ -236,16 +218,37 @@ function md5(bytes) {
     update();
   }
 
+  // Easter egg: typing "jed" turns the page pink.
+  var note = $('note'), noteTimer;
+  function egg() {
+    var now = text.value.trim().toLowerCase() === 'jed';
+    if (now === cute) return;
+    cute = now;
+    document.documentElement.classList.toggle('cute', cute);
+    clearTimeout(noteTimer);
+    note.classList.toggle('on', cute);
+    if (!cute) return;
+    noteTimer = setTimeout(function () { note.classList.remove('on'); }, 2500);
+    for (var i = 0; i < 24; i++) {
+      var h = document.createElement('span');
+      h.className = 'heart';
+      h.textContent = '\u2665';
+      h.style.left = Math.random() * 100 + 'vw';
+      h.style.fontSize = 16 + Math.random() * 28 + 'px';
+      h.style.animationDuration = 2.5 + Math.random() * 2.5 + 's';
+      h.style.animationDelay = Math.random() * 1.2 + 's';
+      h.style.setProperty('--r', (Math.random() * 80 - 40) + 'deg');
+      h.addEventListener('animationend', function () { this.remove(); });
+      document.body.appendChild(h);
+    }
+  }
+
   text.addEventListener('input', update);
-  lines.addEventListener('change', function () { text.rows = lines.checked ? 8 : 3; update(); });
   document.querySelectorAll('input[name=algo], input[name=fmt]').forEach(function (r) { r.addEventListener('change', update); });
   slide.addEventListener('input', function () { setWant(slide.value); });
   len.addEventListener('change', function () { setWant(len.value); });
   len.addEventListener('input', function () { if (len.value !== '') setWant(len.value); });
   $('copy').onclick = function () { copy(result.value, $('copy')); };
-  $('copyall').onclick = function () {
-    copy(current.filter(function (h, i) { return text.value.split('\n')[i].trim() !== ''; }).join('\n'), $('copyall'));
-  };
   result.addEventListener('focus', function () { result.select(); });
   update();
 })();

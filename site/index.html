@@ -17,7 +17,7 @@
 :root { --bg: #fff; --fg: #111; --muted: #666; --line: #bbb; accent-color: #111; color-scheme: light; }
 :root[data-theme="dark"] { --bg: #111; --fg: #eee; --muted: #999; --line: #444; accent-color: #eee; color-scheme: dark; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 32px; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 12px; }
 h1 { font-size: 1.6em; margin: 0 0 6px; }
 h2 { font-size: 1.15em; margin: 36px 0 12px; }
 p { margin: 0 0 10px; }
@@ -27,8 +27,11 @@ a { color: inherit; }
 fieldset { border: 0; padding: 0; margin: 0 0 14px; }
 legend { padding: 0; margin-bottom: 6px; font-size: .9em; }
 .inline { display: flex; flex-wrap: wrap; gap: 4px 18px; }
-.block { display: grid; gap: 4px; font-size: .9em; margin-bottom: 14px; }
+.block { display: grid; gap: 4px; font-size: .9em; margin-bottom: 18px; }
+.block input { font-size: 16px; }
 input, textarea { font: inherit; font-size: 16px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); padding: 4px 6px; }
+input[type=text], input[type=number] { -webkit-appearance: none; appearance: none; border-radius: 0; }
+input[type=number] { -moz-appearance: textfield; }
 textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 input[type=number] { width: 5em; }
 input[type=range] { flex: 1; min-width: 120px; padding: 0; border: 0; }
@@ -38,32 +41,41 @@ button { font: inherit; padding: 6px 14px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .out { display: flex; gap: 10px; align-items: stretch; }
 .out input { flex: 1; min-width: 0; }
-details { margin: 0 0 14px; }
+details { margin: 0 0 10px; }
 summary { cursor: pointer; font-size: .9em; margin-bottom: 10px; }
 button.link { background: none; border: 0; padding: 0; color: inherit; font-size: inherit; text-decoration: underline; cursor: pointer; }
 body, input, textarea { transition: background-color .4s, color .4s, border-color .4s; }
 :root.cute { --bg: #ffe4ef; --fg: #a0124f; --muted: #c2477b; --line: #f19bbf; accent-color: #d6246e; }
 :root.cute[data-theme="dark"] { --bg: #3a0f22; --fg: #ffc2da; --muted: #e88ab0; --line: #8a2f58; accent-color: #ff6fa8; }
-.note { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 16px 24px; font-size: 1.3em; white-space: nowrap; z-index: 10; opacity: 0; transition: opacity .3s; pointer-events: none; }
-.note.on { opacity: 1; }
+.note { text-align: center; color: #e0336f; font-size: clamp(21px, 6vw, 44px); font-weight: bold; line-height: 1.2; max-height: 0; margin: 0; opacity: 0; transform: scale(.6); transition: opacity .35s, transform .5s cubic-bezier(.3, 1.6, .5, 1), max-height .35s, margin .35s; }
+.note.on { opacity: 1; transform: scale(1); max-height: 3em; margin: 24px 0 8px; }
+:root[data-theme="dark"] .note { color: #ff7fae; }
 .heart { position: fixed; bottom: -40px; z-index: 9; pointer-events: none; color: #e8417f; animation: rise linear forwards; }
 @keyframes rise { to { transform: translateY(-115vh) rotate(var(--r)); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .heart { display: none; } }
 [hidden] { display: none !important; }
 footer { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 20px 0 40px; border-top: 1px solid var(--line); font-size: .9em; }
 footer p { margin: 0 0 6px; }
-footer .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Hash Maker</h1>
   <p class="byline muted">by <a href="https://jedbillyb.com/">Jed Blenkhorn</a></p>
-  <p>Type a word or a name to get its hash: a jumble of letters and numbers that is always the same for the same text. Cut it to the length you want and copy it. Nothing you type leaves your browser.</p>
+  <p>Type something and copy its hash. Same text, same hash, every time.</p>
 
   <label class="block">Text
-    <textarea id="text" rows="3" spellcheck="false" autocomplete="off" placeholder="Type here"></textarea>
+    <input type="text" id="text" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Type here">
   </label>
+
+  <div class="block">
+    <label for="result">Hash</label>
+    <div class="out">
+      <input type="text" id="result" class="mono" readonly>
+      <button type="button" id="copy">Copy</button>
+    </div>
+  </div>
 
   <fieldset>
     <legend>Length <span class="muted" id="full"></span></legend>
@@ -95,17 +107,12 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
   </fieldset>
   </details>
 
-  <h2>Hash</h2>
-  <div class="out">
-    <input type="text" id="result" class="mono" readonly aria-label="Hash">
-    <button type="button" id="copy">Copy</button>
-  </div>
+  <p class="note" id="note" role="status">aww rylee your so cute&nbsp;&#x2665;&#xFE0E;</p>
+
 </main>
-<div class="note" id="note" role="status">aww your so cute</div>
 <footer>
-  <p>Made by <a href="https://jedbillyb.com/">Jed Blenkhorn</a>. Also try the <a href="https://font.jedbillyb.com/">Handwriting Font Maker</a>.</p>
-  <p class="links"><a href="https://jedbillyb.com/">jedbillyb.com</a> <a href="https://github.com/jedbillyb">GitHub</a> <a href="mailto:hello@jedbillyb.com">Email</a> <a href="https://buymeacoffee.com/jedbillyb">Buy me a coffee</a></p>
-  <p><button type="button" class="link" id="theme">Dark mode</button></p>
+  <p>Made by <a href="https://jedbillyb.com/">Jed Blenkhorn</a>. Try the <a href="https://font.jedbillyb.com/">Font Maker</a>.</p>
+  <p class="links"><a href="https://github.com/jedbillyb">GitHub</a> <a href="mailto:hello@jedbillyb.com">Email</a> <a href="https://buymeacoffee.com/jedbillyb">Buy me a coffee</a> <button type="button" class="link" id="theme">Dark mode</button></p>
 </footer>
 <script>
 (function () {
@@ -219,20 +226,18 @@ function md5(bytes) {
   }
 
   // Easter egg: typing "jed" turns the page pink.
-  var note = $('note'), noteTimer;
+  var note = $('note');
   function egg() {
     var now = text.value.trim().toLowerCase() === 'jed';
     if (now === cute) return;
     cute = now;
     document.documentElement.classList.toggle('cute', cute);
-    clearTimeout(noteTimer);
     note.classList.toggle('on', cute);
     if (!cute) return;
-    noteTimer = setTimeout(function () { note.classList.remove('on'); }, 2500);
     for (var i = 0; i < 24; i++) {
       var h = document.createElement('span');
       h.className = 'heart';
-      h.textContent = '\u2665';
+      h.textContent = '\u2665\uFE0E';
       h.style.left = Math.random() * 100 + 'vw';
       h.style.fontSize = 16 + Math.random() * 28 + 'px';
       h.style.animationDuration = 2.5 + Math.random() * 2.5 + 's';
@@ -249,7 +254,7 @@ function md5(bytes) {
   len.addEventListener('change', function () { setWant(len.value); });
   len.addEventListener('input', function () { if (len.value !== '') setWant(len.value); });
   $('copy').onclick = function () { copy(result.value, $('copy')); };
-  result.addEventListener('focus', function () { result.select(); });
+  result.addEventListener('focus', function () { result.setSelectionRange(0, result.value.length); });
   update();
 })();
 </script>

@@ -52,7 +52,7 @@ details { margin: 0 0 10px; }
 summary { cursor: pointer; font-size: .9em; margin-bottom: 10px; }
 button.link { background: none; border: 0; padding: 0; color: inherit; font-size: inherit; text-decoration: underline; cursor: pointer; }
 body, input, textarea { transition: background-color .4s, color .4s, border-color .4s; }
-:root.cute { --bg: #ffe4ef; --fg: #a0124f; --muted: #c2477b; --line: #f19bbf; accent-color: #d6246e; }
+:root.cute { --bg: #ffe8f1; --fg: #7d0c3c; --muted: #9a2558; --line: #c4507f; accent-color: #b01a5c; }
 :root.cute[data-theme="dark"] { --bg: #3a0f22; --fg: #ffc2da; --muted: #e88ab0; --line: #8a2f58; accent-color: #ff6fa8; }
 .note { position: fixed; left: 0; right: 0; top: 50%; margin: 0; padding: 0 16px; text-align: center; color: #b8104f; font-size: clamp(17px, 5.2vw, 44px); font-weight: bold; line-height: 1.2; z-index: 10; pointer-events: none; opacity: 0; transform: translateY(-50%) scale(.6); transition: opacity .4s, transform .5s cubic-bezier(.3, 1.6, .5, 1); }
 .note span { display: inline-block; white-space: nowrap; padding: .25em .7em; border-radius: 999px; background: #fff; }
@@ -760,15 +760,24 @@ onmessage = function (e) {
     loadWords().catch(function () {});
     var cb = navigator.clipboard;
     if (!cb || !cb.readText) { blocked(); return; }
+    // Firefox and Safari show their own small Paste button when the copy came from another site or app.
+    // If nothing comes back straight away, say where to click.
+    var asking = setTimeout(function () {
+      show('<p class="found"><b>Click the small Paste button</b> that just popped up by your ' + (touch ? 'finger' : 'mouse') + '.</p>');
+    }, 300);
     cb.readText().then(function (t) {
-      rev.value = t.trim();
+      clearTimeout(asking);
+      t = t.trim();
+      if (!t) { rev.focus(); show('<p class="found muted">Nothing to paste. Copy a hash first.</p>'); return; }
+      rev.value = t;
       clearTimeout(wait);
       find();
-    }, blocked);
+    }, function () { clearTimeout(asking); blocked(); });
   });
+  var touch = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   function blocked() {
     rev.focus();
-    show('<p class="found muted">Your browser didn\'t allow that. Tap the box and paste instead.</p>');
+    show('<p class="found">Paste didn\'t go through. ' + (touch ? '<b>Press and hold</b> the box, then tap Paste.' : '<b>Press Ctrl+V</b> (or Cmd+V on a Mac) to paste into the box.') + ' It searches by itself.</p>');
   }
   rev.addEventListener('focus', function () { loadWords().catch(function () {}); }, { once: true });
 })();

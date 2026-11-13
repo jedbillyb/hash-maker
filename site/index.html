@@ -47,8 +47,8 @@ button.link { background: none; border: 0; padding: 0; color: inherit; font-size
 body, input, textarea { transition: background-color .4s, color .4s, border-color .4s; }
 :root.cute { --bg: #ffe4ef; --fg: #a0124f; --muted: #c2477b; --line: #f19bbf; accent-color: #d6246e; }
 :root.cute[data-theme="dark"] { --bg: #3a0f22; --fg: #ffc2da; --muted: #e88ab0; --line: #8a2f58; accent-color: #ff6fa8; }
-.note { text-align: center; color: #e0336f; font-size: clamp(21px, 6vw, 44px); font-weight: bold; line-height: 1.2; max-height: 0; margin: 0; opacity: 0; transform: scale(.6); transition: opacity .35s, transform .5s cubic-bezier(.3, 1.6, .5, 1), max-height .35s, margin .35s; }
-.note.on { opacity: 1; transform: scale(1); max-height: 3em; margin: 24px 0 8px; }
+.note { position: fixed; left: 0; right: 0; top: 50%; margin: 0; padding: 0 16px; text-align: center; color: #e0336f; font-size: clamp(21px, 6vw, 44px); font-weight: bold; line-height: 1.2; text-shadow: 0 0 14px var(--bg), 0 0 4px var(--bg); z-index: 10; pointer-events: none; opacity: 0; transform: translateY(-50%) scale(.6); transition: opacity .4s, transform .5s cubic-bezier(.3, 1.6, .5, 1); }
+.note.on { opacity: 1; transform: translateY(-50%) scale(1); }
 :root[data-theme="dark"] .note { color: #ff7fae; }
 .heart { position: fixed; bottom: -40px; z-index: 9; pointer-events: none; color: #e8417f; animation: rise linear forwards; }
 @keyframes rise { to { transform: translateY(-115vh) rotate(var(--r)); opacity: 0; } }
@@ -226,13 +226,15 @@ function md5(bytes) {
   }
 
   // Easter egg: typing "jed" turns the page pink.
-  var note = $('note');
+  var note = $('note'), noteTimer;
   function egg() {
     var now = text.value.trim().toLowerCase() === 'jed';
     if (now === cute) return;
     cute = now;
     document.documentElement.classList.toggle('cute', cute);
+    clearTimeout(noteTimer);
     note.classList.toggle('on', cute);
+    if (cute) noteTimer = setTimeout(function () { note.classList.remove('on'); }, 2200);
     if (!cute) return;
     for (var i = 0; i < 24; i++) {
       var h = document.createElement('span');

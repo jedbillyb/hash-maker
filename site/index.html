@@ -512,15 +512,7 @@ onmessage = function (e) {
 
   // Easter egg: typing "jed" turns the page pink.
   var note = $('note'), noteTimer;
-  // Waits half a second so longer text that starts with "jed" doesn't set it off on the way.
-  var eggWait;
   function egg() {
-    clearTimeout(eggWait);
-    var now = text.value.trim().toLowerCase() === 'jed';
-    if (now && !cute) { eggWait = setTimeout(eggSet, 500); return; }
-    if (!now && cute) eggSet();
-  }
-  function eggSet() {
     var now = text.value.trim().toLowerCase() === 'jed';
     if (now === cute) return;
     cute = now;

@@ -4,7 +4,7 @@ https://hash.jedbillyb.com
 
 Type a word or a name and get its hash, cut to any length, then copy it. Hash type (SHA-256, SHA-1, SHA-512, MD5) and letter style are under Advanced options.
 
-**Find the word from a hash:** paste a hash and it checks 465,000 words and names, each in lowercase, Capitalised and CAPS, against all four hash types. Hashes can't really be reversed, so this only finds words that are on the list. Full or cut-short hashes, hex or Base64.
+**Find the word from a hash:** tap Paste (or type or paste a hash into the box) and it searches straight away. It checks 465,000 words and names, each in lowercase, Capitalised and CAPS, against all four hash types. Hashes can't really be reversed, so this only finds words that are on the list. Full or cut-short hashes, hex or Base64.
 
 Everything runs in the browser. Nothing you type is sent anywhere.
 

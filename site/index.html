@@ -118,7 +118,7 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
       <label for="rev">Find the word from a hash</label>
       <div class="out">
         <input type="text" id="rev" class="mono" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Paste a hash">
-        <button type="button" id="find">Find</button>
+        <button type="button" id="paste">Paste</button>
       </div>
     </div>
     <p class="muted" id="revinfo">Checks 465,000 words and names, in lowercase, Capitals and CAPS.</p>
@@ -469,7 +469,7 @@ onmessage = function (e) {
 </script>
 <script>
 (function () {
-  var rev = document.getElementById('rev'), btn = document.getElementById('find'), outEl = document.getElementById('revout');
+  var rev = document.getElementById('rev'), btn = document.getElementById('paste'), outEl = document.getElementById('revout');
   var BYTES = { 'MD5': 16, 'SHA-1': 20, 'SHA-256': 32, 'SHA-512': 64 };
   var HEXLEN = { 32: 'MD5', 40: 'SHA-1', 64: 'SHA-256', 128: 'SHA-512' };
   var B64LEN = { 24: 'MD5', 28: 'SHA-1', 44: 'SHA-256', 88: 'SHA-512' };
@@ -567,9 +567,24 @@ onmessage = function (e) {
     });
   }
 
-  btn.addEventListener('click', find);
-  rev.addEventListener('keydown', function (e) { if (e.key === 'Enter') find(); });
-  rev.addEventListener('paste', function () { setTimeout(find, 0); });
+  // Search on its own shortly after the box changes (typing or pasting).
+  var wait;
+  rev.addEventListener('input', function () { clearTimeout(wait); wait = setTimeout(find, 300); });
+  rev.addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(wait); find(); } });
+  btn.addEventListener('click', function () {
+    loadWords().catch(function () {});
+    var cb = navigator.clipboard;
+    if (!cb || !cb.readText) { blocked(); return; }
+    cb.readText().then(function (t) {
+      rev.value = t.trim();
+      clearTimeout(wait);
+      find();
+    }, blocked);
+  });
+  function blocked() {
+    rev.focus();
+    show('<p class="found muted">Your browser didn\'t allow that. Tap the box and paste instead.</p>');
+  }
   rev.addEventListener('focus', function () { loadWords().catch(function () {}); }, { once: true });
 })();
 </script>

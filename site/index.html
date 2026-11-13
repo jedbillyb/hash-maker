@@ -54,8 +54,9 @@ button.link { background: none; border: 0; padding: 0; color: inherit; font-size
 body, input, textarea { transition: background-color .4s, color .4s, border-color .4s; }
 :root.cute { --bg: #ffe4ef; --fg: #a0124f; --muted: #c2477b; --line: #f19bbf; accent-color: #d6246e; }
 :root.cute[data-theme="dark"] { --bg: #3a0f22; --fg: #ffc2da; --muted: #e88ab0; --line: #8a2f58; accent-color: #ff6fa8; }
-.note { position: fixed; left: 0; right: 0; top: 50%; margin: 0; padding: 0 16px; text-align: center; color: #e0336f; font-size: clamp(21px, 6vw, 44px); font-weight: bold; line-height: 1.2; text-shadow: 0 0 10px var(--bg); z-index: 10; pointer-events: none; opacity: 0; transform: translateY(calc(-50% + 12px)); transition: opacity .6s ease, transform .6s ease; }
-.note.on { opacity: 1; transform: translateY(-50%); }
+.note { position: fixed; left: 0; right: 0; top: 50%; margin: 0; padding: 0 16px; text-align: center; color: #b8104f; font-size: clamp(21px, 6vw, 44px); font-weight: bold; line-height: 1.2; text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg), 0 0 20px var(--bg), 0 0 32px var(--bg); z-index: 10; pointer-events: none; opacity: 0; transform: translateY(-50%) scale(.6); transition: opacity .4s, transform .5s cubic-bezier(.3, 1.6, .5, 1); }
+.note span { display: inline-block; white-space: nowrap; padding: 24px 22px; background: radial-gradient(closest-side, var(--bg) 62%, transparent); }
+.note.on { opacity: 1; transform: translateY(-50%) scale(1); }
 :root[data-theme="dark"] .note { color: #ff7fae; }
 .heart { position: fixed; bottom: -40px; z-index: 9; pointer-events: none; color: #e8417f; animation: rise linear forwards; }
 @keyframes rise { to { transform: translateY(-115vh) rotate(var(--r)); opacity: 0; } }
@@ -144,7 +145,7 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
     <div id="revout" aria-live="polite"></div>
   </section>
 
-  <p class="note" id="note" role="status">aww rylee your so cute&nbsp;&#x2665;&#xFE0E;</p>
+  <p class="note" id="note" role="status"><span>aww rylee your so cute&nbsp;&#x2665;&#xFE0E;</span></p>
 
 </main>
 <footer>
@@ -397,7 +398,14 @@ function pairs(d) {
   }
   postMessage({ done: true });
 }
+// Word lookup for the hint under the hash. The list is fetched and indexed here, off the page's thread.
+var HAS = null, HASLOAD = null;
+function has(d) {
+  if (!HASLOAD) HASLOAD = fetch(d.url).then(function (r) { return r.text(); }).then(function (t) { HAS = new Set(t.split('\n')); });
+  HASLOAD.then(function () { postMessage({ id: d.id, ok: HAS.has(d.w) }); }, function () { HASLOAD = null; postMessage({ id: d.id, ok: null }); });
+}
 onmessage = function (e) {
+  if (e.data.mode === 'has') return has(e.data);
   if (e.data.mode === 'pair') return pairs(e.data);
   var d = e.data, words = d.text.split('\n').slice(d.from, d.to);
   var t = d.target, full = d.full, half = d.half;
@@ -646,9 +654,14 @@ onmessage = function (e) {
     show('<p class="found">' + list(found) + '</p>' + more);
   }
 
+  function getWorkerUrl() {
+    if (!workerUrl) workerUrl = URL.createObjectURL(new Blob([document.getElementById('wsrc').textContent], { type: 'text/javascript' }));
+    return workerUrl;
+  }
+
   // Runs one search across several workers. msg(i, n) is what worker i of n gets.
   function run(me, total, label, msg, done) {
-    if (!workerUrl) workerUrl = URL.createObjectURL(new Blob([document.getElementById('wsrc').textContent], { type: 'text/javascript' }));
+    getWorkerUrl();
     var n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
     var msgs = [];
     for (var i = 0; i < n; i++) msgs.push(msg(i, n));
@@ -680,7 +693,7 @@ onmessage = function (e) {
 
   // Under the top hash: say whether the reverse search could find this text again,
   // using the same rules the search uses.
-  var canEl = document.getElementById('canfind'), poolSet = new Set(POOL), wordSet = null, asked = 0;
+  var canEl = document.getElementById('canfind'), poolSet = new Set(POOL), asked = 0, checker = null, checkId = 0, pending = {}, hintWait;
   var TIP = ' To make one that can, use one word or name, or two common words or names joined by a space, and, &amp;, +, x, loves or nothing (like black and white, Black+White or blackwhite). Both words need the same capitals.';
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function variantsOf(w) {
@@ -709,11 +722,22 @@ onmessage = function (e) {
     var bytes = fmt === 'b64' ? Math.floor(n / 4) * 3 : Math.floor(n / 2);
     if (bytes < 3) return say('<b>Too short to be found again.</b> Use a length of at least 6.');
     if (isPair(s)) return say(bytes < 6 ? '<b>Too short for two words to be found again.</b> Use a length of at least 12.' : n < max && algo === 'SHA-512' ? '<b>Can\'t be found again</b> when two words are cut short with SHA-512. Use Full.' : '<b>Can be found again</b> with Find below.');
-    loadWords().then(function (t) {
-      if (!wordSet) wordSet = new Set(t.split('\n'));
-      var w = s.toLowerCase();
-      say(wordSet.has(w) && variantsOf(w).indexOf(s) >= 0 ? '<b>Can be found again</b> with Find below.' : '<b>Can\'t be found again.</b>' + TIP);
-    }, function () { say(''); });
+    // Ask the lookup worker once typing pauses, so typing never waits on the big list.
+    var w = s.toLowerCase();
+    if (variantsOf(w).indexOf(s) < 0) return say('<b>Can\'t be found again.</b>' + TIP);
+    clearTimeout(hintWait);
+    hintWait = setTimeout(function () {
+      if (!checker) {
+        checker = new Worker(getWorkerUrl());
+        checker.onmessage = function (e) { var f = pending[e.data.id]; delete pending[e.data.id]; if (f) f(e.data.ok); };
+      }
+      var id = ++checkId;
+      pending[id] = function (ok) {
+        if (ok === null) return say('');
+        say(ok ? '<b>Can be found again</b> with Find below.' : '<b>Can\'t be found again.</b>' + TIP);
+      };
+      checker.postMessage({ mode: 'has', id: id, w: w, url: new URL('words-3.txt', location.href).href });
+    }, 250);
   };
 
   // Search on its own shortly after the box changes (typing or pasting).

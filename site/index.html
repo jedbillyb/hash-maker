@@ -146,7 +146,9 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
     <div id="revout" aria-live="polite"></div>
   </section>
 
+  <!-- Popup message, switched off for now:
   <p class="note" id="note" role="status"><span>aww rylee your so cute&nbsp;&#x2665;&#xFE0E;</span></p>
+  -->
 
 </main>
 <footer>
@@ -511,15 +513,30 @@ onmessage = function (e) {
   }
 
   // Easter egg: typing "jed" turns the page pink.
-  var note = $('note'), noteTimer;
-  function egg() {
-    var now = text.value.trim().toLowerCase() === 'jed';
+  // Pink when "jed" or "rylee" is mentioned, in the text box or in a word Find got back.
+  function mentions(s) {
+    var words = s.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])/g) || [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i].toLowerCase();
+      if (w === 'jed' || w === 'rylee') return true;
+    }
+    var flat = s.toLowerCase().replace(/[^a-z]/g, '');
+    return flat === 'jedrylee' || flat === 'ryleejed';
+  }
+  window.mentionsUs = mentions;
+  var cuteFrom = { text: false, found: false };
+  window.setCute = function (from, on) { cuteFrom[from] = on; applyCute(); };
+  function egg() { window.setCute('text', mentions(text.value)); }
+  // var note = $('note'), noteTimer;
+  function applyCute() {
+    var now = cuteFrom.text || cuteFrom.found;
     if (now === cute) return;
     cute = now;
     document.documentElement.classList.toggle('cute', cute);
-    clearTimeout(noteTimer);
-    note.classList.toggle('on', cute);
-    if (cute) noteTimer = setTimeout(function () { note.classList.remove('on'); }, 2200);
+    // Popup message, switched off for now:
+    // clearTimeout(noteTimer);
+    // note.classList.toggle('on', cute);
+    // if (cute) noteTimer = setTimeout(function () { note.classList.remove('on'); }, 2200);
     if (!cute) return;
     for (var i = 0; i < 24; i++) {
       var h = document.createElement('span');
@@ -598,6 +615,7 @@ onmessage = function (e) {
 
   function find() {
     stop();
+    if (window.setCute) window.setCute('found', false);
     var me = ++runId, q = parse(rev.value);
     if (!rev.value.trim()) { show(''); return; }
     if (!q) { show('<p class="found">That doesn\'t look like a hash. It should only have letters and numbers.</p>'); return; }
@@ -643,6 +661,7 @@ onmessage = function (e) {
       show('<p class="found">Not found. It only finds one word or name, or two common words or names joined by a space, and, &amp;, +, x, loves or nothing (like black and white, Black+White or blackwhite).</p>');
       return;
     }
+    if (window.setCute) window.setCute('found', found.some(function (f) { return window.mentionsUs(f.word); }));
     var more = !stopFirst && found.length > 1 ? '<p class="muted">Short hashes can match more than one word.</p>' : '';
     show('<p class="found">' + list(found) + '</p>' + more);
   }

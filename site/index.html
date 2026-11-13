@@ -59,6 +59,8 @@ body, input, textarea { transition: background-color .4s, color .4s, border-colo
 [hidden] { display: none !important; }
 .reverse { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
 .found { margin: 10px 0 0; }
+.hint { margin: 2px 0 0; }
+.hint:empty { display: none; }
 .found b { font-size: 1.15em; }
 footer { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 20px 0 40px; border-top: 1px solid var(--line); font-size: .9em; }
 footer p { margin: 0 0 6px; }
@@ -81,6 +83,7 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
       <input type="text" id="result" class="mono" readonly>
       <button type="button" id="copy">Copy</button>
     </div>
+    <p class="muted hint" id="canfind"></p>
   </div>
 
   <fieldset>
@@ -342,7 +345,44 @@ function variants(w) {
   s[w.replace(/(^|[\s\-'])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); })] = 1;
   return Object.keys(s);
 }
+// Two names joined, like "Jed and Rylee". Each worker takes every step-th name as the outer one,
+// and pairs it with every name up to it, so popular pairs are tried first.
+function pairs(d) {
+  var pool = d.pool, N = pool.length, J = d.joiners, t = d.target, full = d.full, half = d.half;
+  var fns = d.algos.map(function (a) { return FH[a]; });
+  var enc = new TextEncoder(), out = new Uint8Array(64), buf = new Uint8Array(200);
+  var forms = [pool, pool.map(function (s) { return s.charAt(0).toUpperCase() + s.slice(1); })];
+  var fb = forms.map(function (f) { return f.map(function (s) { return enc.encode(s); }); });
+  var jb = J.map(function (s) { return enc.encode(s); });
+  function tryPair(a, b) {
+    for (var f = 0; f < 2; f++) {
+      var A = fb[f][a], B = fb[f][b];
+      for (var q = 0; q < jb.length; q++) {
+        var C = jb[q], len = A.length + C.length + B.length;
+        buf.set(A, 0); buf.set(C, A.length); buf.set(B, A.length + C.length);
+        for (var k = 0; k < fns.length; k++) {
+          fns[k](buf, len, out);
+          var j = 0;
+          while (j < full && out[j] === t[j]) j++;
+          if (j < full) continue;
+          if (half && (out[full] & 0xf0) !== t[full]) continue;
+          postMessage({ word: forms[f][a] + J[q] + forms[f][b], algo: d.algos[k] });
+          if (d.stopFirst) return true;
+        }
+      }
+    }
+    return false;
+  }
+  for (var k = d.start; k < N; k += d.step) {
+    for (var j = 0; j <= k; j++) {
+      if (tryPair(k, j) || (j !== k && tryPair(j, k))) { postMessage({ done: true }); return; }
+    }
+    postMessage({ n: 2 * k + 1 });
+  }
+  postMessage({ done: true });
+}
 onmessage = function (e) {
+  if (e.data.mode === 'pair') return pairs(e.data);
   var d = e.data, words = d.text.split('\n').slice(d.from, d.to);
   var t = d.target, full = d.full, half = d.half;
   var fns = d.algos.map(function (a) { return FH[a]; });
@@ -404,6 +444,7 @@ onmessage = function (e) {
   function update() {
     var n = syncLength(), algo = pick('algo'), fmt = pick('fmt'), me = ++run;
     egg();
+    if (window.onHashMade) window.onHashMade(text.value, n, fmt);
     if (text.value === '') { result.value = ''; return; }
     digest(algo, text.value).then(function (b) {
       if (me !== run) return; // a newer keystroke already started
@@ -434,7 +475,15 @@ onmessage = function (e) {
 
   // Easter egg: typing "jed" turns the page pink.
   var note = $('note'), noteTimer;
+  // Waits half a second so typing "Jed and Rylee" or "Jedidiah" doesn't set it off on the way.
+  var eggWait;
   function egg() {
+    clearTimeout(eggWait);
+    var now = text.value.trim().toLowerCase() === 'jed';
+    if (now && !cute) { eggWait = setTimeout(eggSet, 500); return; }
+    if (!now && cute) eggSet();
+  }
+  function eggSet() {
     var now = text.value.trim().toLowerCase() === 'jed';
     if (now === cute) return;
     cute = now;
@@ -477,7 +526,7 @@ onmessage = function (e) {
 
   function loadWords() {
     if (wordsText) return Promise.resolve(wordsText);
-    if (!wordsLoading) wordsLoading = fetch('words-1.txt').then(function (r) {
+    if (!wordsLoading) wordsLoading = fetch('words-2.txt').then(function (r) {
       if (!r.ok) throw new Error('list');
       return r.text();
     }).then(function (t) { wordsText = t; return t; }, function (e) { wordsLoading = null; throw e; });
@@ -514,6 +563,10 @@ onmessage = function (e) {
   function show(html) { outEl.innerHTML = html; }
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  // Popular first names to pair up (Jed and Rylee first), and the joins between them.
+  var POOL = "jed\nrylee\nmichael\ndavid\njames\njohn\nrobert\nchristopher\nwilliam\njennifer\njoseph\ndaniel\nmatthew\nrichard\nthomas\nmary\nmark\nsteven\nbrian\nanthony\nkevin\njoshua\njessica\ncharles\njason\nandrew\nlisa\nelizabeth\ntimothy\njeffrey\nlinda\nsusan\npatricia\nkimberly\nmichelle\nryan\nsarah\neric\nashley\npaul\nkaren\nmelissa\namanda\nkenneth\nscott\nnicholas\nstephanie\njonathan\njustin\namy\ndeborah\njacob\nbrandon\nstephen\nrebecca\nangela\nemily\ngregory\nlaura\ncynthia\ngary\nronald\ndonald\nnicole\nbarbara\nkelly\nsandra\nheather\ndonna\npatrick\nedward\ndebra\nnancy\npamela\nbenjamin\nsamantha\ntyler\nrachel\njulie\nbrenda\nchristine\nadam\naaron\nchristina\nsharon\nkathleen\nlarry\ngeorge\nzachary\nalexander\nsamuel\njose\nkyle\nkatherine\nlauren\nmaria\nmegan\njeremy\nnathan\ndouglas\nandrea\njordan\ndennis\nterry\nsean\ncarol\npeter\nkeith\nteresa\namber\nvictoria\ndiane\ncheryl\ndanielle\nshannon\ntaylor\ndenise\njamie\nmargaret\nlori\ntammy\nbrittany\ncatherine\ntiffany\nbryan\nanna\nhannah\ncrystal\nshawn\nalexis\nsara\njerry\nraymond\nchristian\ntracy\nerin\nrobin\njacqueline\naustin\nfrank\njanet\nrandy\nkathryn\ntina\nkayla\njesse\nkathy\ndawn\nleslie\ntodd\ndiana\ntravis\nbradley\ncourtney\ncraig\njuan\ntheresa\ncarolyn\nmadison\nwendy\nnatalie\nalyssa\ndylan\ncody\nbruce\nallison\njulia\nchad\nemma\ncindy\nethan\napril\njack\nmonica\nroger\nolivia\nalan\nvanessa\nerica\nangel\nabigail\ndana\nphillip\nkristen\npaula\ncarlos\nvalerie\nann\nmichele\ngabriel\njanice\njeffery\nmelanie\ndanny\ncameron\ncarl\nluis\nalicia\nmorgan\nderek\njasmine\nvincent\nrhonda\nkim\nbrianna\nlawrence\njill\njoel\nrussell\nvictor\nhenry\nricky\nrodney\nlogan\nphilip\njohnny\nholly\nalex\nalexandra\ndustin\nsherry\nstacy\ntony\nmarcus\nsheila\ngerald\nantonio\nnoah\nwayne\nkristin\njoyce\nmartin\njudy\nnathaniel\ntara\njared\nconnie\ngrace\nkatie\ntroy\ncorey\nveronica\nevan\ncurtis\ndebbie\nwalter\ncaleb\ncarrie\nshane\nbilly\ncasey\njoe\nrenee\njudith\nanne\nwillie\nmartha\nstacey\ndale\njimmy\nshirley\nlynn\ngloria\nrandall\nbobby\nian\nbeverly\nbonnie\nadrian\njesus\nbrooke\nsteve\nsuzanne\nbetty\ncassandra\nluke\narthur\nlaurie\nlee\ngina\nvirginia\njane\nlindsey\nallen\nhunter\nbrett\nleah\nisaac\ncathy\nroy\nalbert\nchelsea\nbeth\nsophia\nchris\nheidi\nterri\nerik\njean\ncolleen\nlouis\ndevin\nruth\nglenn\nisabella\nkristina\nwanda\nhaley\ncarla\nrose\nkaitlyn\nmarie\nseth\nkelsey\nwesley\njon\nmiguel\nelijah\nregina\njay\nmitchell\npeggy\ntrevor\nderrick\ndorothy\njoan\ntamara\nmicheal\nmike\nmelinda\nbrent\nharold\nevelyn\nmarilyn\ncaroline\nbarry\nsydney\ntonya\nlindsay\nsabrina\nshelby\nmarc\njenna\nellen\ngail\nlucas\nconnor\nanita\nvicki\ndarlene\ncory\nronnie\nmolly\nhelen\nblake\nerika\ntanya\nfrederick\nralph\naudrey\nisaiah\njeremiah\nannette\ndarrell\ndestiny\ndeanna\nstanley\nricardo\nmario\nrita\nbrandy\nmanuel\nmason\ncharlotte\neugene\npaige\neddie\nalice\njaime\ndean\ncalvin\ngabrielle\nmarissa\nsavannah\nchloe\nkatelyn\njoanne\nelaine\nedwin\nfrances\njorge\nbrandi\ngarrett\nleonard\nriley\nandre\ntommy\nhailey\nmarvin\nchristy\njackson\njulian\ncaitlin\noscar\njackie\nalison\nsylvia\nernest\ncarmen\nkatrina\njeff\nchase\nfrancisco\nhoward\nalejandro\nmaureen\nmadeline\ntracey\nmia\nyvonne\nyolanda\nmiranda\ndarren\nvickie\ngavin\njessie\nava\nwhitney\nkara\nnatasha\nmackenzie\ntheodore\nmeghan\njoy\nlance\nsally\nmelvin\nharry\nmisty\ndominic\njo\nkerry\nbethany\ncolin\nfaith\ndakota\ncole\nlillian\nclaudia\nspencer\nfelicia\nclaire\njerome\nreginald\nfrancis\ntoni\nphyllis\nshelly\nroberto\nkendra\nlydia\njody\ncharlene\nana\nautumn\njodi\nsierra\nbridget\neileen\nclayton\nsherri\njenny\nruben\njoanna\nkristine\nbailey\njake\ngrant\nangelica\nbrad\nbriana\nkristi\nmonique\nalexandria\nhector\npenny\ndarryl\nmariah\neduardo\nkarla\ndesiree\nbrittney\njayden\ncandace\nrachael\nkelli\njeanette\nrosa\nkurt\nella\njohnathan\nxavier\nbecky\nray\nalexa\njavier\nbryce\nmarcia\nfred\ndevon\nearl\nkrista\nbrendan\nnorman\nmelody\nclifford\nkaylee\nivan\nnorma\nmaurice\npriscilla\njoann\nmarsha\njocelyn\nkristy\neva\njeanne\nfernando\nedgar\nruby\nkrystal\nalfred\nbreanna\nomar\naidan\nshelley\nroberta\nowen\nclarence\ntyrone\njillian\nrick\navery\ngwendolyn\nwarren\nirene\ndoris\nangelina\nlorraine\nkylie\ngreg\nnina\nadriana\ntanner\nduane\nvivian\ntristan\nshaun\nneil\nrebekah\nkarl\nmakayla\ndwayne\nbelinda\nnaomi\ntim\ndominique\namelia\njim\nmeredith\nsheryl\ndon\npreston\ncandice\nlandon\nloretta\nnichole\nhope\njuanita\nglen\nsue\nhayden\nisabel\nraul\nclinton\nannie\ndiego\nbernard\nmax\npedro\nsandy\nwyatt\njacquelyn\nandy\nalvin\nconstance\nsebastian\nsonya\ngabriela\ndrew\nmicah\nmathew\nesther\nkendall\naiden\nleon\nzoe\nkirk\nsergio\ndaisy\nsummer\nariel\nglenda\nlevi\ngabriella\nkari\nrobyn\nlily\nbianca\nnicolas\ndalton\nguadalupe\nsheri\nmarlene\njonathon\nfranklin\ncolton\nyvette\nrafael\njade\nrosemary\nandres\nbrady\nsonia\nleroy\ntom\nterrance\ngilbert\nterrence\ngordon\nkristopher\nadrienne\nrene\ndan\ntabitha\ndianne\nariana\nross\ndamon\nmarco\narmando\ncesar\ncheyenne\ntraci\njosephine\ncarter\naubrey\ncarson\njan\npeyton\nbill\ncollin\nalisha\nerick\nkaitlin\ncarly\nlonnie\nroxanne\nmaya\nlois\nrickey\ndaryl\nbyron\naimee\nlucy\nmiriam\nramon\njaden\nmaxwell\nkent\nkellie\ncecilia\nherbert\nashton\nkirsten\nkate\nkelley\nparker\nvernon\ndillon\nlewis\nangie\nkarina\ndwight\ncharlie\nallan\njoey\ndamian\ngeoffrey\nwade\ncristina\nleo\naddison\nalberto\nabraham\ncara\nabby\nsofia\nlloyd\njada\nlatoya\nnora\nbobbie\nmarisa\njulio\nshawna\nmarshall\nguy\njaclyn\nliam\nemmanuel\nchristie\ntrinity\nperry\narlene\njanelle\nlynda\nstuart\nkaleb\nceleste\njohnnie\nkelvin\ngene\ncamille\nvicky\nlacey\narianna\nraquel\nmallory\ncassidy\nsidney\ndianna\ncaitlyn\nelena\nclara\nenrique\nnelson\nlynne\nmaggie\ncristian\nbillie\ngeorgia\nbrayden\ntricia\nshelia\nmindy\ntrent\nnolan\nlouise\ngerardo\nleticia\ndonnie\nalec\nteri\npayton\ngretchen\nleigh\narturo\nhayley\ndarius\nangelo\njana\nallyson\nalfredo\nmichaela\nskyler\njosiah\ntrenton\nashlee\nstacie\ndaniela\nedith\nmarjorie\neli\nlorenzo\nalejandra\nbryant\nkay\nelise\nskylar\nkristie\nmeagan\ncolby\nkenny\njimmie\nmikayla\nmandy\ntrisha\nmarianne\nkasey\nisrael\nfloyd\nrochelle\nginger\ndamien\nantoinette\nebony\nmarion\ndonovan\nalana\njermaine\nmadelyn\nkerri\nshari\nalma\nnikki\nselena\ntami\naaliyah\nroderick\njune\nkimberley\nbrooklyn\nmarcos\ngayle\ncassie\niris\njasmin\noliver\nfredrick\nkiara\nted\neleanor\nmiles\ngeraldine\ndallas\nsam\nnoel\nroland\npatti\norlando\nfreddie\nstefanie\nramona\ntasha\npatty\nmckenzie\nlester\nyesenia\nmilton\nlynette\ncedric\nesmeralda\ntammie\nisabelle\nharrison\nclifton\nvaleria\nclyde\ngage\nneal\nelias\nfrankie\nlora\nty\ngiovanni\nkennedy\nfelix\nlesley\ndominick\njuliana\nnatalia\ndoreen\ndolores\nalissa\nelisabeth\ntracie\nsadie\ndarla\nraven\ntessa\ndave\njonah\nsalvador\ncheri\nlana\nelisa\nsophie\nmarla\nkeri\nlaurel\nmercedes\nernesto\ngerard\nconner\nbernadette\nmalcolm\nben\nrachelle\njohanna\nronda\nchrista\njanie\npauline\nmalik\ndarin\nalisa\npatrice\ncaden\njustine\ngarry\nserena\narnold\njennie\ngregg\nclarissa\nlatasha\nherman\nsimon\ncooper\ntrina\nrudy\ntori\nbrock\nrandolph\nchance\nsherrie\nbritney\ntia\nbetsy\nbraden\njosue\ndelores\njazmin\njanine\nashlyn\nlena\nleonardo\nloren\ngracie\npablo\nharley\nkaden\nrex\ncarolina\npatsy\ndemetrius\nmayra\nadrianna\ncharity\nlorena\nnevaeh\nmarty\nshana\nalexia\nashleigh\nmaryann\nmarisol\nkylee\nnickolas\nmarina\nedna\njordyn\nnadia\ntyson\njulius\nharvey\nsonja\nmildred\ncarole\ngianna\nterrell\ndarrin\ntoby\nroman\ndante\ngustavo\ntrey\nquentin\nchandler\nmyra\njalen\nchelsey\ncorinne\npam\nclint\nbret\nnadine\nliliana\njeannie\nshauna\nkyla\ncarlton\nciara\nshanna\nmarian\nmargarita\nhanna\nsasha\ndiamond".split('\n');
+  var JOIN = [' and ', ' & ', ' + ', '+', ' ', '', ' loves ', ' x '];
+
   function find() {
     stop();
     var me = ++runId, q = parse(rev.value);
@@ -522,50 +575,109 @@ onmessage = function (e) {
     if (q.full < 3) { show('<p class="found">Too short. Paste at least 6 characters of the hash.</p>'); return; }
     var algos = q.algo ? [q.algo] : Object.keys(BYTES).filter(function (a) { return BYTES[a] >= q.full + (q.half ? 1 : 0); });
     if (!algos.length) { show('<p class="found">That is longer than any hash this site makes.</p>'); return; }
-    var stopFirst = !!q.algo;
+    // 6+ bytes (12+ hex) is long enough that a chance match is practically impossible.
+    var stopFirst = !!q.algo || q.full >= 6;
     show('<p class="found muted">Loading the word list…</p>');
     loadWords().then(function (text) {
       if (me !== runId) return;
-      var total = 0;
+      var total = 1;
       for (var i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) total++;
-      total++;
-      if (!workerUrl) workerUrl = URL.createObjectURL(new Blob([document.getElementById('wsrc').textContent], { type: 'text/javascript' }));
-      var n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
-      var per = Math.ceil(total / n), done = 0, checked = 0, found = [], seen = {}, t0 = Date.now();
-      function render(final) {
-        var list = found.map(function (f) { return '<b>' + esc(f.word) + '</b> <span class="muted">(' + f.algo + ')</span>'; });
-        if (final && !found.length) {
-          show('<p class="found">Not found. It\'s not a word or name on the list. Full names with a space, typos and made-up words can\'t be found.</p>');
-        } else if (final) {
-          var more = !stopFirst && found.length > 1 ? '<p class="muted">Short hashes can match more than one word.</p>' : '';
-          show('<p class="found">' + list.join('<br>') + '</p>' + more);
-        } else {
-          var pct = Math.min(99, Math.floor(checked / total * 100));
-          show('<p class="found">' + (list.length ? list.join('<br>') + '<br>' : '') + '<span class="muted">Checking… ' + pct + '%</span></p>');
-        }
-      }
-      for (i = 0; i < n; i++) {
-        var w = new Worker(workerUrl);
-        workers.push(w);
-        w.onmessage = function (e) {
-          if (me !== runId) return;
-          var d = e.data;
-          if (d.word) {
-            var key = d.word + '|' + d.algo;
-            if (!seen[key] && found.length < 20) { seen[key] = 1; found.push(d); }
-            if (stopFirst) { stop(); render(true); return; }
-          }
-          if (d.n) checked += d.n;
-          if (d.done && ++done === n) { stop(); render(true); return; }
-          if (Date.now() - t0 > 150) render(false);
-        };
-        w.onerror = function () { if (me === runId) { stop(); show('<p class="found">Something went wrong searching. Try again.</p>'); } };
-        w.postMessage({ text: text, from: i * per, to: Math.min(total, (i + 1) * per), target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst });
-      }
+      run(me, total, 'Checking words…', function (i, n) {
+        var per = Math.ceil(total / n);
+        return { text: text, from: i * per, to: Math.min(total, (i + 1) * per), target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst };
+      }, function (found) {
+        // Two-name search only for long enough hashes; short ones would match lots of pairs by chance.
+        if (found.length || q.full < 6) return final(found, stopFirst);
+        run(me, POOL.length * POOL.length, 'Trying two names together…', function (i, n) {
+          return { mode: 'pair', pool: POOL, joiners: JOIN, start: i, step: n, target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst };
+        }, function (found2) { final(found2, stopFirst); });
+      });
     }, function () {
       if (me === runId) show('<p class="found">Couldn\'t load the word list. Check your connection and try again.</p>');
     });
   }
+
+  function list(found) {
+    return found.map(function (f) { return '<b>' + esc(f.word) + '</b> <span class="muted">(' + f.algo + ')</span>'; }).join('<br>');
+  }
+  function final(found, stopFirst) {
+    if (!found.length) {
+      show('<p class="found">Not found. It only knows single words and names, and two first names together like Jed and Rylee.</p>');
+      return;
+    }
+    var more = !stopFirst && found.length > 1 ? '<p class="muted">Short hashes can match more than one word.</p>' : '';
+    show('<p class="found">' + list(found) + '</p>' + more);
+  }
+
+  // Runs one search across several workers. msg(i, n) is what worker i of n gets.
+  function run(me, total, label, msg, done) {
+    if (!workerUrl) workerUrl = URL.createObjectURL(new Blob([document.getElementById('wsrc').textContent], { type: 'text/javascript' }));
+    var n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+    var msgs = [];
+    for (var i = 0; i < n; i++) msgs.push(msg(i, n));
+    var first = msgs[0].stopFirst;
+    var finished = 0, checked = 0, found = [], seen = {}, t0 = Date.now(), over = false;
+    function end() { if (over) return; over = true; stop(); done(found); }
+    for (i = 0; i < n; i++) {
+      var w = new Worker(workerUrl);
+      workers.push(w);
+      w.onmessage = function (e) {
+        if (me !== runId || over) return;
+        var d = e.data;
+        if (d.word) {
+          var key = d.word + '|' + d.algo;
+          if (!seen[key] && found.length < 20) { seen[key] = 1; found.push(d); }
+        }
+        if (d.n) checked += d.n;
+        if (d.done && ++finished === n) return end();
+        if (d.word && first) return end();
+        if (Date.now() - t0 > 150) {
+          var pct = Math.min(99, Math.floor(checked / total * 100));
+          show('<p class="found">' + (found.length ? list(found) + '<br>' : '') + '<span class="muted">' + label + ' ' + pct + '%</span></p>');
+        }
+      };
+      w.onerror = function () { if (me === runId && !over) { over = true; stop(); show('<p class="found">Something went wrong searching. Try again.</p>'); } };
+      w.postMessage(msgs[i]);
+    }
+  }
+
+  // Under the top hash: say whether the reverse search could find this text again,
+  // using the same rules the search uses.
+  var canEl = document.getElementById('canfind'), poolSet = new Set(POOL), wordSet = null, asked = 0;
+  var TIP = ' To make one that can, use one word or name, or two first names like Jed and Rylee.';
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function variantsOf(w) {
+    return [w, w.toUpperCase(), cap(w), w.replace(/(^|[\s\-'])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); })];
+  }
+  function inPool(x, capForm) {
+    var l = x.toLowerCase();
+    return poolSet.has(l) && x === (capForm ? cap(l) : l);
+  }
+  function isPair(s) {
+    for (var q = 0; q < JOIN.length; q++) {
+      var J = JOIN[q];
+      for (var i = 1; i < s.length; i++) {
+        if (J ? s.substr(i, J.length) !== J : false) continue;
+        var A = s.slice(0, i), B = s.slice(i + J.length);
+        if (!A || !B) continue;
+        if ((inPool(A, false) && inPool(B, false)) || (inPool(A, true) && inPool(B, true))) return true;
+      }
+    }
+    return false;
+  }
+  window.onHashMade = function (s, n, fmt) {
+    var me = ++asked;
+    function say(t) { if (me === asked) canEl.textContent = t; }
+    if (!s) return say('');
+    var bytes = fmt === 'b64' ? Math.floor(n / 4) * 3 : Math.floor(n / 2);
+    if (bytes < 3) return say('Too short to be found again. Use a length of at least 6.' );
+    if (isPair(s)) return say(bytes >= 6 ? 'Can be found again with Find below.' : 'Too short for two names to be found again. Use a length of at least 12.');
+    loadWords().then(function (t) {
+      if (!wordSet) wordSet = new Set(t.split('\n'));
+      var w = s.toLowerCase();
+      say(wordSet.has(w) && variantsOf(w).indexOf(s) >= 0 ? 'Can be found again with Find below.' : 'Can\'t be found again.' + TIP);
+    }, function () { say(''); });
+  };
 
   // Search on its own shortly after the box changes (typing or pasting).
   var wait;

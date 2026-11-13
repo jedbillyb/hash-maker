@@ -1,39 +1,4 @@
-aroha
-anahera
-ariki
-ataahua
-awhina
-hemi
-hine
-hinewai
-huia
-kahurangi
-kauri
-kiri
-koa
-manaia
-manaaki
-maia
-marama
-mere
-miro
-moana
-ngaio
-nikau
-nia
-pania
-rangi
-rata
-rawiri
-rhonga
-tama
-tane
-tangaroa
-taika
-te aroha
-tiare
-tui
-wiremu
+jed
 rylee
 aaren
 aarika
@@ -2809,6 +2774,7 @@ kira
 kirbee
 kirbie
 kirby
+kiri
 kirsten
 kirsteni
 kirsti
@@ -3247,6 +3213,7 @@ maggie
 maggy
 mahala
 mahalia
+maia
 maible
 maiga
 maighdiln
@@ -6593,6 +6560,7 @@ arnoldas
 arnoldo
 arnulfo
 aroa
+aroha
 aroia
 arola
 aroldo
@@ -12702,7 +12670,6 @@ jeanice
 jeanmarie
 jeanneth
 jeannetta
-jed
 jeferson
 jeff
 jefferey
@@ -15734,6 +15701,7 @@ mirjam
 mirjana
 mirka
 mirko
+miro
 miron
 miroslav
 miroslava
@@ -16468,6 +16436,7 @@ ngoc
 ngone
 nguyet
 niño
+nia
 niall
 niama
 niamh
@@ -19738,6 +19707,7 @@ talitha
 talla
 talwinder
 tam
+tama
 tamaanant
 tamala
 tamari
@@ -19988,6 +19958,7 @@ tiantian
 tianxiang
 tianyu
 tiara
+tiare
 tiberio
 tiberiu
 tiberius
@@ -54553,6 +54524,7 @@ hindrix
 hinds
 hindsch
 hinduja
+hine
 hinek
 hinestrosa
 hinestroza
@@ -61321,6 +61293,7 @@ knussmann
 knutsen
 knutt
 knutzen
+koa
 koal
 koalick
 koall
@@ -67913,6 +67886,7 @@ mamolar
 mamoto
 mamouni
 mampel
+manaia
 manaila
 manala
 manalo
@@ -70065,6 +70039,7 @@ merckx
 mercuri
 mercurio
 merdes
+mere
 merediz
 merelas
 mereles
@@ -82035,6 +82010,7 @@ rastrilla
 rastrojo
 rastrollo
 rat
+rata
 ratado
 ratberger
 ratcliffe
@@ -131040,6 +131016,7 @@ arightly
 arigue
 ariidae
 arikara
+ariki
 aril
 aryl
 arylamine
@@ -249712,6 +249689,7 @@ huguenotic
 huguenotism
 huguenots
 huh
+huia
 huic
 huygenian
 huyghenian
@@ -267463,6 +267441,7 @@ katurai
 katzenjammer
 kauch
 kauravas
+kauri
 kaury
 kauries
 kauris
@@ -301323,6 +301302,7 @@ nextness
 nexum
 nexus
 nexuses
+ngaio
 ngapi
 ngoko
 ngwee
@@ -301813,6 +301793,7 @@ niyama
 niyanda
 niyoga
 nijholt
+nikau
 nikeno
 nikethamide
 nikko
@@ -413444,6 +413425,7 @@ tandoori
 tandour
 tandsticka
 tandstickor
+tane
 tanega
 tanekaha
 tanga
@@ -413451,6 +413433,7 @@ tangaloa
 tangalung
 tangantangan
 tangaridae
+tangaroa
 tangaroan
 tanged
 tangeite
@@ -428884,6 +428867,7 @@ tugriks
 tugs
 tuguria
 tugurium
+tui
 tuy
 tuyer
 tuyere

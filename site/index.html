@@ -624,7 +624,7 @@ onmessage = function (e) {
     if (!algos.length) { show('<p class="found">That is longer than any hash this site makes.</p>'); return; }
     // 6+ bytes (12+ hex) is long enough that a chance match is practically impossible.
     var stopFirst = !!q.algo || q.full >= 6;
-    show('<p class="found muted">Loading the word list…</p>');
+    show('<p class="found"><b>Loading the word list…</b></p>');
     loadWords().then(function (text) {
       if (me !== runId) return;
       var total = 1;
@@ -644,7 +644,7 @@ onmessage = function (e) {
         // A cut-short hash could be any type. SHA-512 is much slower, so two-word search skips it then.
         var pairAlgos = q.algo ? algos : algos.filter(function (a) { return a !== 'SHA-512'; });
         if (!pairAlgos.length) return final(found, stopFirst);
-        run(me, POOL.length * POOL.length, 'Trying two names together…', function (i, n) {
+        run(me, POOL.length * POOL.length, 'Trying two words together…', function (i, n) {
           return { mode: 'pair', pool: POOL, joiners: JOIN, start: i, step: n, target: q.t, full: q.full, half: q.half, algos: pairAlgos, stopFirst: stopFirst };
         }, function (found2) { final(found2, stopFirst); });
       });
@@ -695,7 +695,7 @@ onmessage = function (e) {
         if (d.word && first) return end();
         if (Date.now() - t0 > 150) {
           var pct = Math.min(99, Math.floor(checked / total * 100));
-          show('<p class="found">' + (found.length ? list(found) + '<br>' : '') + '<span class="muted">' + label + ' ' + pct + '%</span></p>');
+          show('<p class="found">' + (found.length ? list(found) + '<br>' : '') + '<b>' + label + ' ' + pct + '%</b></p>');
         }
       };
       w.onerror = function () { if (me === runId && !over) { over = true; stop(); show('<p class="found">Something went wrong searching. Try again.</p>'); } };

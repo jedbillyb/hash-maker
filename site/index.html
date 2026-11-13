@@ -11,7 +11,11 @@
 <meta property="og:description" content="Type a word or a name and get its hash. Cut it to any length and copy it.">
 <meta property="og:url" content="https://hash.jedbillyb.com/">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fff'/%3E%3Cpath d='M12 5 9 27M22 5l-3 22M6 12h21M5 20h21' stroke='%23111' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script>try { if (localStorage.getItem('theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
 <style>
 :root { --bg: #fff; --fg: #111; --muted: #666; --line: #bbb; accent-color: #111; color-scheme: light; }
@@ -60,6 +64,10 @@ body, input, textarea { transition: background-color .4s, color .4s, border-colo
 .reverse { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
 .found { margin: 10px 0 0; }
 .hint { margin: 2px 0 0; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.presets button { padding: 3px 10px; font-size: .9em; min-width: 3em; }
+.presets button.on { background: var(--fg); color: var(--bg); }
+.presets button:disabled { opacity: .35; cursor: default; }
 .hint:empty { display: none; }
 .found b { font-size: 1.15em; }
 footer { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 20px 0 40px; border-top: 1px solid var(--line); font-size: .9em; }
@@ -92,6 +100,14 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
       <input type="number" id="len" min="1" inputmode="numeric" aria-label="Length">
       <input type="range" id="slide" min="1" aria-label="Length slider">
     </div>
+    <div class="presets" id="presets">
+      <button type="button" data-n="7">7</button>
+      <button type="button" data-n="8">8</button>
+      <button type="button" data-n="12">12</button>
+      <button type="button" data-n="16">16</button>
+      <button type="button" data-n="32">32</button>
+      <button type="button" data-n="full">Full</button>
+    </div>
   </fieldset>
 
   <details>
@@ -118,13 +134,13 @@ footer .links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 
   <section class="reverse">
     <div class="block">
-      <label for="rev">Find the word from a hash</label>
+      <label for="rev">Find the word(s) from a hash</label>
       <div class="out">
         <input type="text" id="rev" class="mono" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Paste a hash">
         <button type="button" id="paste">Paste</button>
       </div>
     </div>
-    <p class="muted" id="revinfo">Checks 465,000 words and names, in lowercase, Capitals and CAPS.</p>
+    <p class="muted" id="revinfo">Checks 810,000 words and names, and two common words or names together, in lowercase, Capitals and CAPS.</p>
     <div id="revout" aria-live="polite"></div>
   </section>
 
@@ -345,7 +361,7 @@ function variants(w) {
   s[w.replace(/(^|[\s\-'])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); })] = 1;
   return Object.keys(s);
 }
-// Two names joined, like "Jed and Rylee". Each worker takes every step-th name as the outer one,
+// Two words or names joined, like "black and white". Each worker takes every step-th name as the outer one,
 // and pairs it with every name up to it, so popular pairs are tried first.
 function pairs(d) {
   var pool = d.pool, N = pool.length, J = d.joiners, t = d.target, full = d.full, half = d.half;
@@ -388,6 +404,7 @@ onmessage = function (e) {
   var fns = d.algos.map(function (a) { return FH[a]; });
   var enc = new TextEncoder(), buf = new Uint8Array(400), out = new Uint8Array(64);
   for (var i = 0; i < words.length; i++) {
+    if (!words[i]) continue;
     var vs = variants(words[i]);
     for (var v = 0; v < vs.length; v++) {
       var r = enc.encodeInto(vs[v], buf);
@@ -432,19 +449,30 @@ onmessage = function (e) {
     return crypto.subtle.digest(algo, bytes).then(function (b) { return new Uint8Array(b); });
   }
 
+  var presets = Array.prototype.slice.call(document.querySelectorAll('#presets button'));
+  presets.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.n === 'full') { want = null; update(); } else setWant(b.dataset.n);
+    });
+  });
   function syncLength() {
     var max = fullLength();
     len.max = slide.max = max;
     var v = want === null ? max : Math.min(want, max);
     len.value = slide.value = v;
     full.textContent = '(full is ' + max + ')';
+    presets.forEach(function (b) {
+      var p = b.dataset.n === 'full' ? max : +b.dataset.n;
+      b.disabled = b.dataset.n !== 'full' && p >= max;
+      b.classList.toggle('on', p === v && !b.disabled);
+    });
     return v;
   }
 
   function update() {
     var n = syncLength(), algo = pick('algo'), fmt = pick('fmt'), me = ++run;
     egg();
-    if (window.onHashMade) window.onHashMade(text.value, n, fmt);
+    if (window.onHashMade) window.onHashMade(text.value, n, fmt, algo, fullLength());
     if (text.value === '') { result.value = ''; return; }
     digest(algo, text.value).then(function (b) {
       if (me !== run) return; // a newer keystroke already started
@@ -475,7 +503,7 @@ onmessage = function (e) {
 
   // Easter egg: typing "jed" turns the page pink.
   var note = $('note'), noteTimer;
-  // Waits half a second so typing "Jed and Rylee" or "Jedidiah" doesn't set it off on the way.
+  // Waits half a second so longer text that starts with "jed" doesn't set it off on the way.
   var eggWait;
   function egg() {
     clearTimeout(eggWait);
@@ -526,7 +554,7 @@ onmessage = function (e) {
 
   function loadWords() {
     if (wordsText) return Promise.resolve(wordsText);
-    if (!wordsLoading) wordsLoading = fetch('words-2.txt').then(function (r) {
+    if (!wordsLoading) wordsLoading = fetch('words-3.txt').then(function (r) {
       if (!r.ok) throw new Error('list');
       return r.text();
     }).then(function (t) { wordsText = t; return t; }, function (e) { wordsLoading = null; throw e; });
@@ -563,8 +591,8 @@ onmessage = function (e) {
   function show(html) { outEl.innerHTML = html; }
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-  // Popular first names to pair up (Jed and Rylee first), and the joins between them.
-  var POOL = "jed\nrylee\nmichael\ndavid\njames\njohn\nrobert\nchristopher\nwilliam\njennifer\njoseph\ndaniel\nmatthew\nrichard\nthomas\nmary\nmark\nsteven\nbrian\nanthony\nkevin\njoshua\njessica\ncharles\njason\nandrew\nlisa\nelizabeth\ntimothy\njeffrey\nlinda\nsusan\npatricia\nkimberly\nmichelle\nryan\nsarah\neric\nashley\npaul\nkaren\nmelissa\namanda\nkenneth\nscott\nnicholas\nstephanie\njonathan\njustin\namy\ndeborah\njacob\nbrandon\nstephen\nrebecca\nangela\nemily\ngregory\nlaura\ncynthia\ngary\nronald\ndonald\nnicole\nbarbara\nkelly\nsandra\nheather\ndonna\npatrick\nedward\ndebra\nnancy\npamela\nbenjamin\nsamantha\ntyler\nrachel\njulie\nbrenda\nchristine\nadam\naaron\nchristina\nsharon\nkathleen\nlarry\ngeorge\nzachary\nalexander\nsamuel\njose\nkyle\nkatherine\nlauren\nmaria\nmegan\njeremy\nnathan\ndouglas\nandrea\njordan\ndennis\nterry\nsean\ncarol\npeter\nkeith\nteresa\namber\nvictoria\ndiane\ncheryl\ndanielle\nshannon\ntaylor\ndenise\njamie\nmargaret\nlori\ntammy\nbrittany\ncatherine\ntiffany\nbryan\nanna\nhannah\ncrystal\nshawn\nalexis\nsara\njerry\nraymond\nchristian\ntracy\nerin\nrobin\njacqueline\naustin\nfrank\njanet\nrandy\nkathryn\ntina\nkayla\njesse\nkathy\ndawn\nleslie\ntodd\ndiana\ntravis\nbradley\ncourtney\ncraig\njuan\ntheresa\ncarolyn\nmadison\nwendy\nnatalie\nalyssa\ndylan\ncody\nbruce\nallison\njulia\nchad\nemma\ncindy\nethan\napril\njack\nmonica\nroger\nolivia\nalan\nvanessa\nerica\nangel\nabigail\ndana\nphillip\nkristen\npaula\ncarlos\nvalerie\nann\nmichele\ngabriel\njanice\njeffery\nmelanie\ndanny\ncameron\ncarl\nluis\nalicia\nmorgan\nderek\njasmine\nvincent\nrhonda\nkim\nbrianna\nlawrence\njill\njoel\nrussell\nvictor\nhenry\nricky\nrodney\nlogan\nphilip\njohnny\nholly\nalex\nalexandra\ndustin\nsherry\nstacy\ntony\nmarcus\nsheila\ngerald\nantonio\nnoah\nwayne\nkristin\njoyce\nmartin\njudy\nnathaniel\ntara\njared\nconnie\ngrace\nkatie\ntroy\ncorey\nveronica\nevan\ncurtis\ndebbie\nwalter\ncaleb\ncarrie\nshane\nbilly\ncasey\njoe\nrenee\njudith\nanne\nwillie\nmartha\nstacey\ndale\njimmy\nshirley\nlynn\ngloria\nrandall\nbobby\nian\nbeverly\nbonnie\nadrian\njesus\nbrooke\nsteve\nsuzanne\nbetty\ncassandra\nluke\narthur\nlaurie\nlee\ngina\nvirginia\njane\nlindsey\nallen\nhunter\nbrett\nleah\nisaac\ncathy\nroy\nalbert\nchelsea\nbeth\nsophia\nchris\nheidi\nterri\nerik\njean\ncolleen\nlouis\ndevin\nruth\nglenn\nisabella\nkristina\nwanda\nhaley\ncarla\nrose\nkaitlyn\nmarie\nseth\nkelsey\nwesley\njon\nmiguel\nelijah\nregina\njay\nmitchell\npeggy\ntrevor\nderrick\ndorothy\njoan\ntamara\nmicheal\nmike\nmelinda\nbrent\nharold\nevelyn\nmarilyn\ncaroline\nbarry\nsydney\ntonya\nlindsay\nsabrina\nshelby\nmarc\njenna\nellen\ngail\nlucas\nconnor\nanita\nvicki\ndarlene\ncory\nronnie\nmolly\nhelen\nblake\nerika\ntanya\nfrederick\nralph\naudrey\nisaiah\njeremiah\nannette\ndarrell\ndestiny\ndeanna\nstanley\nricardo\nmario\nrita\nbrandy\nmanuel\nmason\ncharlotte\neugene\npaige\neddie\nalice\njaime\ndean\ncalvin\ngabrielle\nmarissa\nsavannah\nchloe\nkatelyn\njoanne\nelaine\nedwin\nfrances\njorge\nbrandi\ngarrett\nleonard\nriley\nandre\ntommy\nhailey\nmarvin\nchristy\njackson\njulian\ncaitlin\noscar\njackie\nalison\nsylvia\nernest\ncarmen\nkatrina\njeff\nchase\nfrancisco\nhoward\nalejandro\nmaureen\nmadeline\ntracey\nmia\nyvonne\nyolanda\nmiranda\ndarren\nvickie\ngavin\njessie\nava\nwhitney\nkara\nnatasha\nmackenzie\ntheodore\nmeghan\njoy\nlance\nsally\nmelvin\nharry\nmisty\ndominic\njo\nkerry\nbethany\ncolin\nfaith\ndakota\ncole\nlillian\nclaudia\nspencer\nfelicia\nclaire\njerome\nreginald\nfrancis\ntoni\nphyllis\nshelly\nroberto\nkendra\nlydia\njody\ncharlene\nana\nautumn\njodi\nsierra\nbridget\neileen\nclayton\nsherri\njenny\nruben\njoanna\nkristine\nbailey\njake\ngrant\nangelica\nbrad\nbriana\nkristi\nmonique\nalexandria\nhector\npenny\ndarryl\nmariah\neduardo\nkarla\ndesiree\nbrittney\njayden\ncandace\nrachael\nkelli\njeanette\nrosa\nkurt\nella\njohnathan\nxavier\nbecky\nray\nalexa\njavier\nbryce\nmarcia\nfred\ndevon\nearl\nkrista\nbrendan\nnorman\nmelody\nclifford\nkaylee\nivan\nnorma\nmaurice\npriscilla\njoann\nmarsha\njocelyn\nkristy\neva\njeanne\nfernando\nedgar\nruby\nkrystal\nalfred\nbreanna\nomar\naidan\nshelley\nroberta\nowen\nclarence\ntyrone\njillian\nrick\navery\ngwendolyn\nwarren\nirene\ndoris\nangelina\nlorraine\nkylie\ngreg\nnina\nadriana\ntanner\nduane\nvivian\ntristan\nshaun\nneil\nrebekah\nkarl\nmakayla\ndwayne\nbelinda\nnaomi\ntim\ndominique\namelia\njim\nmeredith\nsheryl\ndon\npreston\ncandice\nlandon\nloretta\nnichole\nhope\njuanita\nglen\nsue\nhayden\nisabel\nraul\nclinton\nannie\ndiego\nbernard\nmax\npedro\nsandy\nwyatt\njacquelyn\nandy\nalvin\nconstance\nsebastian\nsonya\ngabriela\ndrew\nmicah\nmathew\nesther\nkendall\naiden\nleon\nzoe\nkirk\nsergio\ndaisy\nsummer\nariel\nglenda\nlevi\ngabriella\nkari\nrobyn\nlily\nbianca\nnicolas\ndalton\nguadalupe\nsheri\nmarlene\njonathon\nfranklin\ncolton\nyvette\nrafael\njade\nrosemary\nandres\nbrady\nsonia\nleroy\ntom\nterrance\ngilbert\nterrence\ngordon\nkristopher\nadrienne\nrene\ndan\ntabitha\ndianne\nariana\nross\ndamon\nmarco\narmando\ncesar\ncheyenne\ntraci\njosephine\ncarter\naubrey\ncarson\njan\npeyton\nbill\ncollin\nalisha\nerick\nkaitlin\ncarly\nlonnie\nroxanne\nmaya\nlois\nrickey\ndaryl\nbyron\naimee\nlucy\nmiriam\nramon\njaden\nmaxwell\nkent\nkellie\ncecilia\nherbert\nashton\nkirsten\nkate\nkelley\nparker\nvernon\ndillon\nlewis\nangie\nkarina\ndwight\ncharlie\nallan\njoey\ndamian\ngeoffrey\nwade\ncristina\nleo\naddison\nalberto\nabraham\ncara\nabby\nsofia\nlloyd\njada\nlatoya\nnora\nbobbie\nmarisa\njulio\nshawna\nmarshall\nguy\njaclyn\nliam\nemmanuel\nchristie\ntrinity\nperry\narlene\njanelle\nlynda\nstuart\nkaleb\nceleste\njohnnie\nkelvin\ngene\ncamille\nvicky\nlacey\narianna\nraquel\nmallory\ncassidy\nsidney\ndianna\ncaitlyn\nelena\nclara\nenrique\nnelson\nlynne\nmaggie\ncristian\nbillie\ngeorgia\nbrayden\ntricia\nshelia\nmindy\ntrent\nnolan\nlouise\ngerardo\nleticia\ndonnie\nalec\nteri\npayton\ngretchen\nleigh\narturo\nhayley\ndarius\nangelo\njana\nallyson\nalfredo\nmichaela\nskyler\njosiah\ntrenton\nashlee\nstacie\ndaniela\nedith\nmarjorie\neli\nlorenzo\nalejandra\nbryant\nkay\nelise\nskylar\nkristie\nmeagan\ncolby\nkenny\njimmie\nmikayla\nmandy\ntrisha\nmarianne\nkasey\nisrael\nfloyd\nrochelle\nginger\ndamien\nantoinette\nebony\nmarion\ndonovan\nalana\njermaine\nmadelyn\nkerri\nshari\nalma\nnikki\nselena\ntami\naaliyah\nroderick\njune\nkimberley\nbrooklyn\nmarcos\ngayle\ncassie\niris\njasmin\noliver\nfredrick\nkiara\nted\neleanor\nmiles\ngeraldine\ndallas\nsam\nnoel\nroland\npatti\norlando\nfreddie\nstefanie\nramona\ntasha\npatty\nmckenzie\nlester\nyesenia\nmilton\nlynette\ncedric\nesmeralda\ntammie\nisabelle\nharrison\nclifton\nvaleria\nclyde\ngage\nneal\nelias\nfrankie\nlora\nty\ngiovanni\nkennedy\nfelix\nlesley\ndominick\njuliana\nnatalia\ndoreen\ndolores\nalissa\nelisabeth\ntracie\nsadie\ndarla\nraven\ntessa\ndave\njonah\nsalvador\ncheri\nlana\nelisa\nsophie\nmarla\nkeri\nlaurel\nmercedes\nernesto\ngerard\nconner\nbernadette\nmalcolm\nben\nrachelle\njohanna\nronda\nchrista\njanie\npauline\nmalik\ndarin\nalisa\npatrice\ncaden\njustine\ngarry\nserena\narnold\njennie\ngregg\nclarissa\nlatasha\nherman\nsimon\ncooper\ntrina\nrudy\ntori\nbrock\nrandolph\nchance\nsherrie\nbritney\ntia\nbetsy\nbraden\njosue\ndelores\njazmin\njanine\nashlyn\nlena\nleonardo\nloren\ngracie\npablo\nharley\nkaden\nrex\ncarolina\npatsy\ndemetrius\nmayra\nadrianna\ncharity\nlorena\nnevaeh\nmarty\nshana\nalexia\nashleigh\nmaryann\nmarisol\nkylee\nnickolas\nmarina\nedna\njordyn\nnadia\ntyson\njulius\nharvey\nsonja\nmildred\ncarole\ngianna\nterrell\ndarrin\ntoby\nroman\ndante\ngustavo\ntrey\nquentin\nchandler\nmyra\njalen\nchelsey\ncorinne\npam\nclint\nbret\nnadine\nliliana\njeannie\nshauna\nkyla\ncarlton\nciara\nshanna\nmarian\nmargarita\nhanna\nsasha\ndiamond".split('\n');
+  // The 1,000 most used spoken English words and 1,000 most popular first names, taken in turns, and the joins between them.
+  var POOL = "you\nmichael\ni\ndavid\nthe\njames\nto\njohn\na\nrobert\nit\nchristopher\nand\nwilliam\nthat\njennifer\nof\njoseph\nis\ndaniel\nin\nmatthew\nwhat\nrichard\nwe\nthomas\nme\nmary\nthis\nmark\nhe\nsteven\nfor\nbrian\nmy\nanthony\non\nkevin\nhave\njoshua\nyour\njessica\ndo\ncharles\nwas\njason\nno\nandrew\nnot\nlisa\nbe\nelizabeth\nare\ntimothy\nknow\njeffrey\ncan\nlinda\nwith\nsusan\nbut\npatricia\nall\nkimberly\nso\nmichelle\njust\nryan\nthere\nsarah\nhere\neric\nthey\nashley\nlike\npaul\nget\nkaren\nshe\nmelissa\ngo\namanda\nif\nkenneth\nright\nscott\nout\nnicholas\nabout\nstephanie\nup\njonathan\nat\njustin\nhim\namy\nnow\ndeborah\noh\njacob\none\nbrandon\ncome\nstephen\nwell\nrebecca\nher\nangela\nhow\nemily\nyeah\ngregory\nwill\nlaura\ngot\ncynthia\nwant\ngary\nthink\nronald\nas\ndonald\nsee\nnicole\ndid\nbarbara\ngood\nkelly\nwho\nsandra\nwhy\nheather\nfrom\ndonna\nlet\npatrick\nhis\nedward\nyes\ndebra\nwhen\nnancy\ngoing\npamela\ntime\nbenjamin\nan\nsamantha\nokay\ntyler\nback\nrachel\nlook\njulie\nus\nbrenda\nwould\nchristine\nthem\nadam\nwhere\naaron\nwere\nchristina\ntake\nsharon\nthen\nkathleen\nhad\nlarry\nor\ngeorge\nbeen\nzachary\nour\nalexander\ngonna\nsamuel\ntell\njose\nreally\nkyle\nman\nkatherine\nsome\nlauren\nsay\nmaria\nhey\nmegan\ncould\njeremy\ndidn\nnathan\nby\ndouglas\nneed\nandrea\nsomething\njordan\nhas\ndennis\ntoo\nterry\nmore\nsean\nway\ncarol\ndown\npeter\nmake\nkeith\nvery\nteresa\nnever\namber\nonly\nvictoria\npeople\ndiane\nover\ncheryl\nbecause\ndanielle\nlittle\nshannon\nplease\ntaylor\nlove\ndenise\nshould\njamie\nmean\nmargaret\nsaid\nlori\nsorry\ntammy\ngive\nbrittany\noff\ncatherine\nam\ntiffany\nthank\nbryan\nany\nanna\ntwo\nhannah\neven\ncrystal\nmuch\nshawn\ndoing\nalexis\nsure\nsara\nthing\njerry\nthese\nraymond\nhelp\nchristian\nfirst\ntracy\ninto\nerin\nanything\nrobin\nstill\njacqueline\nfind\naustin\nlife\nfrank\nnothing\njanet\nsir\nrandy\nday\nkathryn\ngod\ntina\nwork\nkayla\ntheir\njesse\nuh\nkathy\nagain\ndawn\nmaybe\nleslie\nmust\ntodd\nbefore\ndiana\nother\ntravis\nwait\nbradley\nstop\ncourtney\ncall\ncraig\nafter\njuan\nwon\ntheresa\ntalk\ncarolyn\naway\nmadison\nthan\nwendy\nthought\nnatalie\nhome\nalyssa\nnight\ndylan\nput\ncody\ngreat\nbruce\nthose\nallison\nlast\njulia\nbetter\nchad\neverything\nemma\ntold\ncindy\nnew\nethan\nthings\napril\nalways\njack\nkeep\nmonica\nlong\nroger\nyears\nolivia\nleave\nalan\ndoes\nvanessa\nmoney\nerica\naround\nangel\ndoesn\nabigail\nname\ndana\nplace\nphillip\never\nkristen\nfeel\npaula\nguys\ncarlos\nfather\nvalerie\nmade\nann\nold\nmichele\nisn\ngabriel\nwhich\njanice\nbig\njeffery\nlot\nmelanie\ndone\ndanny\nhello\ncameron\nnice\ncarl\nbelieve\nluis\ngirl\nalicia\nsomeone\nmorgan\nfine\nderek\nthanks\njasmine\nwanted\nvincent\nkind\nrhonda\ncoming\nkim\nhouse\nbrianna\nevery\nlawrence\nok\njill\nthrough\njoel\nbeing\nrussell\ncourse\nvictor\nstay\nhenry\nleft\nricky\ndad\nrodney\nenough\nlogan\nhappened\nphilip\ncame\njohnny\nmay\nholly\nmother\nalex\nwrong\nalexandra\nworld\ndustin\nbad\nsherry\nmight\nstacy\nthree\ntony\ntoday\nmarcus\nlisten\nsheila\nanother\ngerald\nunderstand\nantonio\nhear\nnoah\nremember\nwayne\nask\nkristin\nown\njoyce\nsame\nmartin\nshow\njudy\nelse\nnathaniel\nkill\ntara\ntalking\njared\nfound\nconnie\nnext\ngrace\ngetting\nkatie\ncare\ntroy\ncar\ncorey\nlooking\nveronica\nson\nevan\ntry\ncurtis\nwoman\ndebbie\nwent\nwalter\nhi\ncaleb\ndead\ncarrie\nmany\nshane\nmind\nbilly\nwasn\ncasey\nfriend\njoe\nbest\njed\nmom\nrenee\nhell\njudith\nmorning\nanne\ntrying\nwillie\nboy\nmartha\ntogether\nstacey\nyourself\ndale\njob\njimmy\nsaw\nshirley\nfamily\nlynn\nreal\ngloria\nwithout\nrandall\nbaby\nbobby\nroom\nian\nwouldn\nbeverly\nalready\nbonnie\nmove\nadrian\nmost\njesus\nseen\nbrooke\nlive\nsteve\nmiss\nsuzanne\nactually\nbetty\nhuh\ncassandra\nshit\nluke\nboth\narthur\nheard\nlaurie\nonce\nlee\nready\ngina\nhead\nvirginia\ncalled\njane\nused\nlindsey\nidea\nallen\nknew\nhunter\nhold\nbrett\nhappy\nleah\ndoor\nisaac\nsuch\ncathy\nfuck\nroy\nbrother\nalbert\nalso\nchelsea\npretty\nbeth\nbit\nsophia\ntook\nchris\nhaven\nheidi\nyet\nterri\nmen\nerik\nwhole\njean\nstart\ncolleen\nuse\nlouis\nwhile\ndevin\nsince\nruth\nwife\nglenn\ndays\nisabella\nguess\nkristina\ntomorrow\nwanda\nmatter\nhaley\nmeet\ncarla\nbring\nrose\ntonight\nkaitlyn\neveryone\nmarie\nrun\nseth\nwanna\nkelsey\nhard\nwesley\nah\njon\nalone\nmiguel\nmyself\nelijah\nschool\nregina\ngone\njay\num\nmitchell\nend\npeggy\nsaying\ntrevor\nphone\nderrick\nplay\ndorothy\nlooks\njoan\ncouldn\ntamara\nfucking\nmicheal\nproblem\nmike\nfew\nmelinda\nfriends\nbrent\ngotta\nharold\nago\nevelyn\nopen\nmarilyn\nanyone\ncaroline\nkilled\nbarry\nface\nsydney\nuntil\ntonya\nlost\nlindsay\npolice\nsabrina\nexcuse\nshelby\nturn\nmarc\nbusiness\njenna\ncase\nellen\nwants\ngail\nsays\nlucas\ntrue\nconnor\ndie\nanita\nheart\nvicki\nsoon\ndarlene\neach\ncory\nworry\nronnie\nlater\nmolly\nyear\nhelen\nwatch\nblake\nmusic\nerika\nhand\ntanya\nhaving\nfrederick\nprobably\nralph\nbeautiful\naudrey\ndoctor\nisaiah\nsit\njeremiah\neat\nannette\nthinking\ndarrell\nyoung\ndestiny\nsecond\ndeanna\nworking\nstanley\nwater\nricardo\nperson\nmario\npart\nrita\nkids\nbrandy\nlate\nmanuel\nstuff\nmason\nexactly\ncharlotte\nunder\neugene\ndeath\npaige\nminute\neddie\npay\nalice\ncrazy\njaime\nforget\ndean\neverybody\ncalvin\nkid\ngabrielle\nchange\nmarissa\ngave\nsavannah\nhappen\nchloe\ndamn\nkatelyn\nfive\njoanne\ndrink\nelaine\nfar\nedwin\nknows\nfrances\nits\njorge\nwhatever\nbrandi\neyes\ngarrett\nshut\nleonard\naren\nriley\nhit\nandre\ntaking\ntommy\neasy\nhailey\ntimes\nmarvin\ncheck\nchristy\nhands\njackson\nminutes\njulian\ndeal\ncaitlin\ndifferent\noscar\nmeans\njackie\npoint\nalison\ninside\nsylvia\nmakes\nernest\nasked\ncarmen\nsomebody\nkatrina\nmine\njeff\nmaking\nchase\nbody\nfrancisco\nafraid\nhoward\nsleep\nalejandro\ndear\nmaureen\nquite\nmadeline\nfour\ntracey\nanyway\nmia\nclose\nyvonne\nain\nyolanda\nparty\nrylee\nfun\nmiranda\nagainst\ndarren\nword\nvickie\ncomes\ngavin\nimportant\njessie\nset\nava\nshall\nwhitney\nstory\nkara\nnumber\nnatasha\ndaughter\nmackenzie\nleast\ntheodore\nwaiting\nmeghan\nhurt\njoy\nwish\nlance\nmoment\nsally\nfight\nmelvin\nweek\nharry\nhusband\nmisty\ngirls\ndominic\nrest\njo\nmarried\nkerry\nfire\nbethany\ngame\ncolin\nnobody\nfaith\nmr\ndakota\nchildren\ncole\nside\nlillian\nstand\nclaudia\nread\nspencer\nthough\nfelicia\ncut\nclaire\nstarted\njerome\nsister\nreginald\nsupposed\nfrancis\nbetween\ntoni\nchild\nphyllis\ngoes\nshelly\nhours\nroberto\nspeak\nkendra\nwomen\nlydia\nbehind\njody\nalmost\ncharlene\ntruth\nana\nblood\nautumn\nable\njodi\nlady\nsierra\nanymore\nbridget\nplaying\neileen\ngets\nclayton\nshot\nsherri\nreason\njenny\ntrouble\nruben\nbreak\njoanna\nwar\nkristine\ncity\nbailey\nwalk\njake\ntown\ngrant\ntrust\nangelica\nmet\nbrad\noffice\nbriana\nquestion\nkristi\nbrought\nmonique\nyours\nalexandria\nwelcome\nhector\nhigh\npenny\nwow\ndarryl\ncouple\nmariah\nhalf\neduardo\ndied\nkarla\ncool\ndesiree\nfree\nbrittney\neither\njayden\nseems\ncandace\npower\nrachael\nwhoa\nkelli\nbye\njeanette\nbuy\nrosa\ntelling\nkurt\nhoney\nella\ntried\njohnathan\nfront\nxavier\nteam\nbecky\nanswer\nray\ngun\nalexa\nboys\njavier\nline\nbryce\nsend\nmarcia\nnews\nfred\nstupid\ndevon\nbed\nearl\nhurry\nkrista\nfull\nbrendan\nmonths\nnorman\nsave\nmelody\nsometimes\nclifford\nbecome\nkaylee\nalong\nivan\nhate\nnorma\nfood\nmaurice\noutside\npriscilla\nlight\njoann\nneeds\nmarsha\ndog\njocelyn\ncountry\nkristy\nclear\neva\norder\njeanne\nem\nfernando\nfact\nedgar\nlord\nruby\ncaptain\nkrystal\nsix\nalfred\nhot\nbreanna\nfunny\nomar\nblack\naidan\nalive\nshelley\npick\nroberta\nfeeling\nowen\nliving\nclarence\ncause\ntyrone\nahead\njillian\nlose\nrick\nking\navery\nplan\ngwendolyn\ndinner\nwarren\nsighs\nirene\nsort\ndoris\nleaving\nangelina\nshouldn\nlorraine\nrunning\nkylie\nboss\ngreg\nalright\nnina\npromise\nadriana\ntaken\ntanner\nsafe\nduane\nma\nvivian\nbook\ntristan\nsent\nshaun\nwhite\nneil\nhour\nrebekah\nanybody\nkarl\nsmall\nmakayla\nperfect\ndwayne\nlives\nbelinda\nspecial\nnaomi\nparents\ntim\nhimself\ndominique\nperhaps\namelia\nsounds\njim\nserious\nmeredith\nsick\nsheryl\ncompany\ndon\nha\npreston\nscared\ncandice\nuncle\nlandon\npoor\nloretta\nred\nnichole\npast\nhope\nearth\njuanita\npossible\nglen\nshoot\nsue\ntouch\nhayden\nsound\nisabel\ntop\nraul\nass\nclinton\nlaughs\nannie\ncannot\ndiego\nasking\nbernard\nwin\nmax\nglad\npedro\ncontrol\nsandy\nhmm\nwyatt\nhuman\njacquelyn\ndrive\nandy\nhair\nalvin\nbitch\nconstance\nluck\nsebastian\nmurder\nsonya\nhappens\ngabriela\nair\ndrew\nten\nmicah\ndaddy\nmathew\nfinally\nesther\nchuckles\nkendall\nfast\naiden\ncold\nleon\nseem\nzoe\nlaughing\nkirk\nwords\nsergio\nhospital\ndaisy\nstreet\nsummer\nhang\nariel\ndance\nglenda\nmeeting\nlevi\ntill\ngabriella\nothers\nkari\ncatch\nrobyn\nfollow\nlily\nsense\nbianca\nsex\nnicolas\nlie\ndalton\nevening\nguadalupe\nmaster\nsheri\nknown\nmarlene\ndream\njonathon\nwrite\nfranklin\nmillion\ncolton\nvoice\nyvette\nsweet\nrafael\nrather\njade\nfelt\nrosemary\nsign\nandres\nlucky\nbrady\nsomewhere\nsonia\nbet\nleroy\nlonger\ntom\ncalling\nterrance\nworked\ngilbert\nquiet\nterrence\nlooked\ngordon\nless\nkristopher\npull\nadrienne\nbeat\nrene\ncareful\ndan\ncoffee\ntabitha\nreturn\ndianne\nsecret\nariana\nweeks\nross\nweren\ndamon\ndate\nmarco\nseeing\narmando\nfall\ncesar\ngiven\ncheyenne\nooh\ntraci\nfault\njosephine\nstraight\ncarter\ntakes\naubrey\nsong\ncarson\nfuture\njan\ngentlemen\npeyton\nloved\nbill\nchanged\ncollin\nroad\nalisha\ncalm\nerick\nwonderful\nkaitlin\nmad\ncarly\nturned\nlonnie\ndrop\nroxanne\nladies\nmaya\nlearn\nlois\nstep\nrickey\nabsolutely\ndaryl\nearly\nbyron\nexplain\naimee\nclean\nlucy\npiece\nmiriam\nyesterday\nramon\nthrow\njaden\npicture\nmaxwell\nland\nkent\nfeet\nkellie\nwonder\ncecilia\nquestions\nherbert\nspeaking\nashton\nworth\nkirsten\ndarling\nkate\ndude\nkelley\ngiving\nparker\npresident\nvernon\neye\ndillon\nquick\nlewis\nmoving\nangie\nfigure\nkarina\nstate\ndwight\nstrong\ncharlie\nnone\nallan\namazing\njoey\nones\ndamian\nworks\ngeoffrey\nact\nwade\nneeded\ncristina\nweird\nleo\nlaw\naddison\nworried\nalberto\nreport\nabraham\ngoodbye\ncara\nmissing\nabby\nchoice\nsofia\nhappening\nlloyd\nchief\njada\nwedding\nlatoya\nstrange\nnora\ngeneral\nbobbie\npain\nmarisa\nkidding\njulio\ndecided\nshawna\nya\nmarshall\npass\nguy\ntired\njaclyn\nclass\nliam\nofficer\nemmanuel\nkept\nchristie\nwake\ntrinity\nworse\nperry\nbusy\narlene\neh\njanelle\nmistake\nlynda\nkiss\nstuart\ncourt\nkaleb\nbuilding\nceleste\nfinish\njohnnie\nduring\nkelvin\nage\ngene\nship\ncamille\ncaught\nvicky\nmarry\nlacey\nmeant\narianna\nsell\nraquel\ndark\nmallory\nwatching\ncassidy\nsystem\nsidney\nsuppose\ndianna\nevidence\ncaitlyn\nmovie\nelena\nride\nclara\ncompletely\nenrique\nmouth\nnelson\ntotally\nlynne\nbirthday\nmaggie\ntv\ncristian\nforgive\nbillie\nborn\ngeorgia\nimagine\nbrayden\ninformation\ntricia\ninstead\nshelia\ndefinitely\nmindy\nsecurity\ntrent\ncertainly\nnolan\nfilm\nlouise\nmonth\ngerardo\nlying\nleticia\nunless\ndonnie\ntrain\nalec\nseven\nteri\nwear\npayton\nclothes\ngretchen\nhotel\nleigh\nchristmas\narturo\nattack\nhayley\nhasn\ndarius\nround\nangelo\nexpect\njana\nsing\nallyson\nterrible\nalfredo\nbag\nmichaela\nhistory\nskyler\nblue\njosiah\nnear\ntrenton\nbroke\nashlee\nstation\nstacie\nseriously\ndaniela\nforever\nedith\nexcept\nmarjorie\nthinks\neli\nmessage\nlorenzo\nentire\nalejandra\ntable\nbryant\ntalked\nkay\nacross\nelise\nrock\nskylar\nlovely\nkristie\nhandle\nmeagan\nmiddle\ncolby\nbuddy\nkenny\npaid\njimmie\nprotect\nmikayla\nusing\nmandy\nfloor\ntrisha\nran\nmarianne\nswear\nkasey\nspend\nisrael\nsituation\nfloyd\nring\nrochelle\nanywhere\nginger\ndangerous\ndamien\nyork\nantoinette\narmy\nebony\nlead\nmarion\nbought\ndonovan\nfinished\nalana\nfair\njermaine\nsun\nmadelyn\nletter\nkerri\nfool\nshari\nattention\nalma\nclub\nnikki\nsimple\nselena\ninteresting\ntami\nspace\naaliyah\ntest\nroderick\nbox\njune\ngroup\nkimberley\nsingle\nbrooklyn\nsitting\nmarcos\nmarriage\ngayle\njoin\ncassie\nfear\niris\npeace\njasmin\nforgot\noliver\nforce\nfredrick\nshort\nkiara\nnormal\nted\npresent\neleanor\nenjoy\nmiles\ncrime\ngeraldine\nhorse\ndallas\nground\nsam\namerican\nnoel\ncount\nroland\narea\npatti\ncharge\norlando\nhonor\nfreddie\nlunch\nstefanie\nradio\nramona\nidiot\ntasha\nball\npatty\nsurprise\nmckenzie\npaper\nlester\nkey\nyesenia\nboat\nmilton\nquickly\nlynette\ngold\ncedric\nbar\nesmeralda\nfish\ntammie\nwearing\nisabelle\ncrying\nharrison\naccident\nclifton\ngovernment\nvaleria\neight\nclyde\nfell\ngage\ncover\nneal\ncertain\nelias\ninterested\nfrankie\ndeep\nlora\nstar\nty\nsea\ngiovanni\nagree\nkennedy\nproblems\nfelix\ndetective\nlesley\nprison\ndominick\nmajor\njuliana\nstick\nnatalia\noffer\ndoreen\ndifficult\ndolores\nsmart\nalissa\npersonal\nelisabeth\nrecord\ntracie\nstopped\nsadie\nhide\ndarla\nwhether\nraven\nbank\ntessa\ntrip\ndave\nrelax\njonah\namerica\nsalvador\npublic\ncheri\nlist\nlana\nafternoon\nelisa\nbrain\nsophie\nfix\nmarla\nbastard\nkeri\nproud\nlaurel\ntea\nmercedes\nservice\nernesto\nscreaming\ngerard\nforward\nconner\nangry\nbernadette\npark\nmalcolm\nsoul\nben\nfighting\nrachelle\nrich\njohanna\nagent\nronda\nblow\nchrista\ndress\njanie\nmissed\npauline\nscene\nmalik\nkilling\ndarin\nstanding\nalisa\nsaved\npatrice\nmm\ncaden\nrespect\njustine\nkiller\ngarry\nice\nserena\nmess\narnold\ntough\njennie\nfeels\ngregg\nchurch\nclarissa\nsad\nlatasha\ncell\nherman\ndrunk\nsimon\nshare\ncooper\ncamera\ntrina\nwithin\nrudy\ncard\ntori\nfly\nbrock\ngirlfriend\nrandolph\nlaugh\nchance\nsmell\nsherrie\nbroken\nbritney\nmum\ntia\nhonest\nbetsy\noften\nbraden\nstarting\njosue\ncalls\ndelores\nspent\njazmin\nthird\njanine\nenglish\nashlyn\nvisit\nlena\nmama\nleonardo\njudge\nloren\nwindow\ngracie\nhungry\npablo\ndare\nharley\nrelationship\nkaden\nmoved\nrex\nprove\ncarolina\nprivate\npatsy\nwall\ndemetrius\nseat\nmayra\nposition\nadrianna\nlieutenant\ncharity\nrealize\nlorena\nlt\nnevaeh\nespecially\nmarty\nmachine\nshana\nwalking\nalexia\nart\nashleigh\npleasure\nmaryann\nbloody\nmarisol\ncollege\nkylee\nfrench\nnickolas\ninvolved\nmarina\ncry\nedna\nbecame\njordyn\nlived\nnadia\nimpossible\ntyson\nobviously\njulius\nneither\nharvey\naccept\nsonja\nboyfriend\nmildred\nbesides\ncarole\nqueen\ngianna\nteacher\nterrell\ncops\ndarrin\nsake\ntoby\nloves\nroman\ncarry\ndante\nteach\ngustavo\napartment\ntrey\nupset\nquentin\ngreen\nchandler\nla\nmyra\nliked\njalen\ncute\nchelsey\nevil\ncorinne\nprofessor\npam\ncontact\nclint\njoke\nbret\ncop\nnadine\nhuge\nliliana\nholy\njeannie\nstore\nshauna\njail\nkyla\nlikes\ncarlton\nlawyer\nciara\ndoubt\nshanna\ncontinue\nmarian\nappreciate\nmargarita\ncat\nhanna\nshop\nsasha\ndriving\ndiamond".split('\n');
   var JOIN = [' and ', ' & ', ' + ', '+', ' ', '', ' loves ', ' x '];
 
   function find() {
@@ -583,13 +611,22 @@ onmessage = function (e) {
       var total = 1;
       for (var i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) total++;
       run(me, total, 'Checking words…', function (i, n) {
-        var per = Math.ceil(total / n);
-        return { text: text, from: i * per, to: Math.min(total, (i + 1) * per), target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst };
+        // Cut the list at line breaks so each worker only gets its own part.
+        function cut(k) {
+          if (k <= 0) return 0;
+          if (k >= n) return text.length;
+          var at = text.indexOf('\n', Math.floor(text.length * k / n));
+          return at < 0 ? text.length : at + 1;
+        }
+        return { text: text.slice(cut(i), cut(i + 1)), from: 0, to: Infinity, target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst };
       }, function (found) {
         // Two-name search only for long enough hashes; short ones would match lots of pairs by chance.
         if (found.length || q.full < 6) return final(found, stopFirst);
+        // A cut-short hash could be any type. SHA-512 is much slower, so two-word search skips it then.
+        var pairAlgos = q.algo ? algos : algos.filter(function (a) { return a !== 'SHA-512'; });
+        if (!pairAlgos.length) return final(found, stopFirst);
         run(me, POOL.length * POOL.length, 'Trying two names together…', function (i, n) {
-          return { mode: 'pair', pool: POOL, joiners: JOIN, start: i, step: n, target: q.t, full: q.full, half: q.half, algos: algos, stopFirst: stopFirst };
+          return { mode: 'pair', pool: POOL, joiners: JOIN, start: i, step: n, target: q.t, full: q.full, half: q.half, algos: pairAlgos, stopFirst: stopFirst };
         }, function (found2) { final(found2, stopFirst); });
       });
     }, function () {
@@ -602,7 +639,7 @@ onmessage = function (e) {
   }
   function final(found, stopFirst) {
     if (!found.length) {
-      show('<p class="found">Not found. It only knows single words and names, and two first names together like Jed and Rylee.</p>');
+      show('<p class="found">Not found. It only finds one word or name, or two common words or names together like black and white.</p>');
       return;
     }
     var more = !stopFirst && found.length > 1 ? '<p class="muted">Short hashes can match more than one word.</p>' : '';
@@ -644,7 +681,7 @@ onmessage = function (e) {
   // Under the top hash: say whether the reverse search could find this text again,
   // using the same rules the search uses.
   var canEl = document.getElementById('canfind'), poolSet = new Set(POOL), wordSet = null, asked = 0;
-  var TIP = ' To make one that can, use one word or name, or two first names like Jed and Rylee.';
+  var TIP = ' To make one that can, use one word or name, or two common words or names like black and white.';
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function variantsOf(w) {
     return [w, w.toUpperCase(), cap(w), w.replace(/(^|[\s\-'])(\S)/g, function (m, a, b) { return a + b.toUpperCase(); })];
@@ -665,17 +702,17 @@ onmessage = function (e) {
     }
     return false;
   }
-  window.onHashMade = function (s, n, fmt) {
+  window.onHashMade = function (s, n, fmt, algo, max) {
     var me = ++asked;
-    function say(t) { if (me === asked) canEl.textContent = t; }
+    function say(t) { if (me === asked) canEl.innerHTML = t; }
     if (!s) return say('');
     var bytes = fmt === 'b64' ? Math.floor(n / 4) * 3 : Math.floor(n / 2);
-    if (bytes < 3) return say('Too short to be found again. Use a length of at least 6.' );
-    if (isPair(s)) return say(bytes >= 6 ? 'Can be found again with Find below.' : 'Too short for two names to be found again. Use a length of at least 12.');
+    if (bytes < 3) return say('<b>Too short to be found again.</b> Use a length of at least 6.');
+    if (isPair(s)) return say(bytes < 6 ? '<b>Too short for two words to be found again.</b> Use a length of at least 12.' : n < max && algo === 'SHA-512' ? '<b>Can\'t be found again</b> when two words are cut short with SHA-512. Use Full.' : '<b>Can be found again</b> with Find below.');
     loadWords().then(function (t) {
       if (!wordSet) wordSet = new Set(t.split('\n'));
       var w = s.toLowerCase();
-      say(wordSet.has(w) && variantsOf(w).indexOf(s) >= 0 ? 'Can be found again with Find below.' : 'Can\'t be found again.' + TIP);
+      say(wordSet.has(w) && variantsOf(w).indexOf(s) >= 0 ? '<b>Can be found again</b> with Find below.' : '<b>Can\'t be found again.</b>' + TIP);
     }, function () { say(''); });
   };
 
